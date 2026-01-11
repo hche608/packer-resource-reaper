@@ -30,6 +30,8 @@ parameter_overrides = [
     "MaxInstanceAgeHours=2",
     "DryRun=true",
     "ScheduleExpression='rate(1 hour)'",
+    "LogLevel=INFO",
+    "BatchDeleteSize=1",
     "LogRetentionDays=30"
 ]
 
@@ -52,6 +54,8 @@ parameter_overrides = [
     "MaxInstanceAgeHours=2",
     "DryRun=false",
     "ScheduleExpression='rate(1 hour)'",
+    "LogLevel=INFO",
+    "BatchDeleteSize=1",
     "LogRetentionDays=90"
 ]
 
@@ -68,5 +72,7 @@ parameter_overrides = [
     "MaxInstanceAgeHours=1",
     "DryRun=true",
     "ScheduleExpression='rate(5 minutes)'",
+    "LogLevel=DEBUG",
+    "BatchDeleteSize=1",
     "LogRetentionDays=7"
 ]
