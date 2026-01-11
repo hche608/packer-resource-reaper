@@ -32,7 +32,7 @@ parameter_overrides = [
     "ScheduleExpression='rate(1 hour)'",
     "LogLevel=INFO",
     "BatchDeleteSize=1",
-    "LogRetentionDays=30"
+    "LogRetentionDays=1"
 ]
 
 [default.local_start_api.parameters]
@@ -53,10 +53,10 @@ region = "ap-southeast-2"
 parameter_overrides = [
     "MaxInstanceAgeHours=2",
     "DryRun=false",
-    "ScheduleExpression='rate(1 hour)'",
+    "ScheduleExpression='rate(15 minutes)'",
     "LogLevel=INFO",
-    "BatchDeleteSize=1",
-    "LogRetentionDays=90"
+    "BatchDeleteSize=2",
+    "LogRetentionDays=3"
 ]
 
 # Development/testing environment configuration
@@ -73,6 +73,6 @@ parameter_overrides = [
     "DryRun=true",
     "ScheduleExpression='rate(5 minutes)'",
     "LogLevel=DEBUG",
-    "BatchDeleteSize=1",
-    "LogRetentionDays=7"
+    "BatchDeleteSize=5",
+    "LogRetentionDays=1"
 ]
