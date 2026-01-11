@@ -70,6 +70,13 @@ Parameters:
       Default is 1 (sequential deletion). Higher values improve performance
       but increase API call concurrency.
 
+  KeyPairPattern:
+    Type: String
+    Default: 'packer_'
+    Description: >
+      Prefix pattern for identifying Packer-created key pairs.
+      Only instances with key pairs matching this pattern will be considered for cleanup.
+
   LogRetentionDays:
     Type: Number
     Default: 30
@@ -326,6 +333,7 @@ Resources:
           SNS_TOPIC_ARN: !Ref NotificationTopic
           LOG_LEVEL: !Ref LogLevel
           BATCH_DELETE_SIZE: !Ref BatchDeleteSize
+          KEY_PAIR_PATTERN: !Ref KeyPairPattern
       Events:
         ScheduledEvent:
           Type: Schedule

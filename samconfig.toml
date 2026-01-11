@@ -32,6 +32,7 @@ parameter_overrides = [
     "ScheduleExpression='rate(1 hour)'",
     "LogLevel=INFO",
     "BatchDeleteSize=1",
+    "KeyPairPattern=packer_",
     "LogRetentionDays=1"
 ]
 
@@ -56,6 +57,7 @@ parameter_overrides = [
     "ScheduleExpression='rate(15 minutes)'",
     "LogLevel=INFO",
     "BatchDeleteSize=2",
+    "KeyPairPattern=packer_",
     "LogRetentionDays=3"
 ]
 
@@ -74,5 +76,6 @@ parameter_overrides = [
     "ScheduleExpression='rate(5 minutes)'",
     "LogLevel=DEBUG",
     "BatchDeleteSize=5",
+    "KeyPairPattern=packer_",
     "LogRetentionDays=1"
 ]

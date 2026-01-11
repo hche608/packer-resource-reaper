@@ -109,6 +109,7 @@ When deploying with `sam deploy --guided`, you'll be prompted for these paramete
 | `NotificationEmail` | Email for notifications | (empty) | Valid email address |
 | `LogLevel` | Logging verbosity | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
 | `BatchDeleteSize` | Resources to delete per batch | `1` | 1-50 |
+| `KeyPairPattern` | Prefix pattern for Packer key pairs | `packer_` | Any string |
 | `LogRetentionDays` | CloudWatch log retention | `30` | 1, 3, 5, 7, 14, 30, 60, 90, etc. |
 
 ### Configuration Examples
