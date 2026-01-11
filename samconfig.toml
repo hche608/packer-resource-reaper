@@ -1,0 +1,72 @@
+# AWS SAM CLI Configuration for Packer Resource Reaper
+# This file provides default deployment settings for the SAM CLI.
+# 
+# Usage:
+#   sam build
+#   sam deploy                    # Uses defaults from this file
+#   sam deploy --guided           # Interactive deployment with prompts
+#   sam deploy --config-env prod  # Use production environment settings
+
+version = 0.1
+
+[default]
+[default.global.parameters]
+stack_name = "packer-resource-reaper"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.validate.parameters]
+lint = true
+
+[default.deploy.parameters]
+capabilities = "CAPABILITY_NAMED_IAM"
+confirm_changeset = true
+resolve_s3 = true
+s3_prefix = "packer-resource-reaper"
+region = "ap-southeast-2"
+parameter_overrides = [
+    "MaxInstanceAgeHours=2",
+    "DryRun=true",
+    "ScheduleExpression='rate(1 hour)'",
+    "LogRetentionDays=30"
+]
+
+[default.local_start_api.parameters]
+warm_containers = "EAGER"
+
+[default.local_start_lambda.parameters]
+warm_containers = "EAGER"
+
+# Production environment configuration
+[prod]
+[prod.deploy.parameters]
+stack_name = "packer-resource-reaper-prod"
+capabilities = "CAPABILITY_NAMED_IAM"
+confirm_changeset = true
+resolve_s3 = true
+s3_prefix = "packer-resource-reaper-prod"
+region = "ap-southeast-2"
+parameter_overrides = [
+    "MaxInstanceAgeHours=2",
+    "DryRun=false",
+    "ScheduleExpression='rate(1 hour)'",
+    "LogRetentionDays=90"
+]
+
+# Development/testing environment configuration
+[dev]
+[dev.deploy.parameters]
+stack_name = "packer-resource-reaper-dev"
+capabilities = "CAPABILITY_NAMED_IAM"
+confirm_changeset = false
+resolve_s3 = true
+s3_prefix = "packer-resource-reaper-dev"
+region = "ap-southeast-2"
+parameter_overrides = [
+    "MaxInstanceAgeHours=1",
+    "DryRun=true",
+    "ScheduleExpression='rate(5 minutes)'",
+    "LogRetentionDays=7"
+]

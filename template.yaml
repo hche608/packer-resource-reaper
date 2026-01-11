@@ -1,0 +1,422 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  AWS Packer Resource Reaper - Serverless zombie resource cleanup.
+  Identifies and cleans up EC2 instances and associated resources left behind by failed Packer builds.
+  WARNING: Instances are detected by SSH key name pattern "packer_*". Do NOT use if you have
+  non-Packer instances using similar key naming patterns.
+
+Metadata:
+  AWS::ServerlessRepo::Application:
+    Name: packer-resource-reaper
+    Description: Automatically clean up zombie EC2 instances from failed Packer builds
+    Author: DevOps Team
+    Labels:
+      - packer
+      - ec2
+      - cleanup
+      - serverless
+
+Parameters:
+  MaxInstanceAgeHours:
+    Type: Number
+    Default: 2
+    Description: Maximum age in hours before an instance is considered for cleanup (must be positive)
+    MinValue: 1
+    MaxValue: 168
+
+  DryRun:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: >
+      Enable dry-run mode. When true, identifies cleanup candidates without executing
+      destructive operations. Set to 'false' to enable actual cleanup.
+
+  ScheduleExpression:
+    Type: String
+    Default: 'rate(1 hour)'
+    Description: >
+      EventBridge schedule expression for reaper execution.
+      Examples: 'rate(1 hour)', 'rate(30 minutes)', 'cron(0 * * * ? *)'
+
+  NotificationEmail:
+    Type: String
+    Default: ''
+    Description: Email address for cleanup notifications (optional)
+
+  LogLevel:
+    Type: String
+    Default: 'INFO'
+    AllowedValues:
+      - 'DEBUG'
+      - 'INFO'
+      - 'WARNING'
+      - 'ERROR'
+      - 'CRITICAL'
+    Description: >
+      Log level for the Lambda function. Use DEBUG for detailed troubleshooting,
+      INFO for normal operation, ERROR or higher for production cost savings.
+
+  BatchDeleteSize:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 50
+    Description: >
+      Number of resources to delete concurrently in each batch.
+      Default is 1 (sequential deletion). Higher values improve performance
+      but increase API call concurrency.
+
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    Description: Number of days to retain CloudWatch logs
+    AllowedValues:
+      - 1
+      - 3
+      - 5
+      - 7
+      - 14
+      - 30
+      - 60
+      - 90
+      - 120
+      - 150
+      - 180
+      - 365
+      - 400
+      - 545
+      - 731
+      - 1827
+      - 3653
+
+Conditions:
+  HasNotificationEmail: !Not [!Equals [!Ref NotificationEmail, '']]
+
+Globals:
+  Function:
+    Timeout: 300
+    MemorySize: 256
+    Runtime: python3.11
+    Architectures:
+      - x86_64
+
+Resources:
+  # SNS Topic for notifications
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${AWS::StackName}-notifications'
+      DisplayName: Packer Resource Reaper Notifications
+      Tags:
+        - Key: Application
+          Value: PackerResourceReaper
+        - Key: ManagedBy
+          Value: SAM
+
+  # SNS Topic Policy - restrict publishing to Lambda function only
+  NotificationTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref NotificationTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowLambdaPublish
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref NotificationTopic
+            Condition:
+              ArnLike:
+                aws:SourceArn: !GetAtt ReaperFunction.Arn
+
+  # Email subscription (if provided)
+  EmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      TopicArn: !Ref NotificationTopic
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+
+  # IAM Role for Lambda function with least privilege permissions
+  ReaperFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-lambda-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Tags:
+        - Key: Application
+          Value: PackerResourceReaper
+
+  # IAM Policy for EC2 read operations (scanning)
+  EC2ReadPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-ec2-read'
+      Roles:
+        - !Ref ReaperFunctionRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EC2DescribePermissions
+            Effect: Allow
+            Action:
+              - ec2:DescribeInstances
+              - ec2:DescribeVolumes
+              - ec2:DescribeSnapshots
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeKeyPairs
+              - ec2:DescribeAddresses
+              - ec2:DescribeNetworkInterfaces
+            Resource: '*'
+
+  # IAM Policy for EC2 cleanup operations (destructive)
+  EC2CleanupPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-ec2-cleanup'
+      Roles:
+        - !Ref ReaperFunctionRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: TerminateInstances
+            Effect: Allow
+            Action:
+              - ec2:TerminateInstances
+            Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+          - Sid: DeleteSecurityGroups
+            Effect: Allow
+            Action:
+              - ec2:DeleteSecurityGroup
+            Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*'
+          - Sid: DeleteKeyPairs
+            Effect: Allow
+            Action:
+              - ec2:DeleteKeyPair
+            Resource: '*'
+          - Sid: DeleteVolumes
+            Effect: Allow
+            Action:
+              - ec2:DeleteVolume
+            Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:volume/*'
+          - Sid: DeleteSnapshots
+            Effect: Allow
+            Action:
+              - ec2:DeleteSnapshot
+            Resource: !Sub 'arn:aws:ec2:${AWS::Region}::snapshot/*'
+          - Sid: ReleaseElasticIPs
+            Effect: Allow
+            Action:
+              - ec2:ReleaseAddress
+            Resource: '*'
+
+  # IAM Policy for SNS notifications
+  SNSPublishPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-sns-publish'
+      Roles:
+        - !Ref ReaperFunctionRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublishNotifications
+            Effect: Allow
+            Action:
+              - sns:Publish
+            Resource: !Ref NotificationTopic
+
+  # IAM Policy for CloudWatch Logs
+  CloudWatchLogsPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-cloudwatch-logs'
+      Roles:
+        - !Ref ReaperFunctionRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CreateLogStreams
+            Effect: Allow
+            Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-function:*'
+
+  # IAM Policy for STS operations (get caller identity)
+  STSPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-sts'
+      Roles:
+        - !Ref ReaperFunctionRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: GetCallerIdentity
+            Effect: Allow
+            Action:
+              - sts:GetCallerIdentity
+            Resource: '*'
+
+  # IAM Policy for orphaned IAM role cleanup
+  IAMCleanupPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-iam-cleanup'
+      Roles:
+        - !Ref ReaperFunctionRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: IAMReadPermissions
+            Effect: Allow
+            Action:
+              - iam:ListRoles
+              - iam:ListInstanceProfiles
+              - iam:ListInstanceProfilesForRole
+              - iam:ListAttachedRolePolicies
+              - iam:ListRolePolicies
+            Resource: '*'
+          - Sid: IAMCleanupPermissions
+            Effect: Allow
+            Action:
+              - iam:RemoveRoleFromInstanceProfile
+              - iam:DetachRolePolicy
+              - iam:DeleteRolePolicy
+              - iam:DeleteRole
+            Resource:
+              - !Sub 'arn:aws:iam::${AWS::AccountId}:role/packer_*'
+              - !Sub 'arn:aws:iam::${AWS::AccountId}:role/packer-*'
+          - Sid: IAMInstanceProfileCleanup
+            Effect: Allow
+            Action:
+              - iam:RemoveRoleFromInstanceProfile
+            Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:instance-profile/*'
+
+  # Lambda function - stateless, single account/region
+  ReaperFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-function'
+      Description: >
+        Identifies and cleans up zombie Packer resources.
+        Stateless execution - performs fresh scan each run.
+      CodeUri: .
+      Handler: reaper.handler.lambda_handler
+      Role: !GetAtt ReaperFunctionRole.Arn
+      Environment:
+        Variables:
+          MAX_INSTANCE_AGE_HOURS: !Ref MaxInstanceAgeHours
+          DRY_RUN: !Ref DryRun
+          SNS_TOPIC_ARN: !Ref NotificationTopic
+          LOG_LEVEL: !Ref LogLevel
+          BATCH_DELETE_SIZE: !Ref BatchDeleteSize
+      Events:
+        ScheduledEvent:
+          Type: Schedule
+          Properties:
+            Schedule: !Ref ScheduleExpression
+            Description: Scheduled trigger for Packer Resource Reaper
+            Enabled: true
+            Name: !Sub '${AWS::StackName}-schedule'
+      Tags:
+        Application: PackerResourceReaper
+        ManagedBy: SAM
+
+  # CloudWatch Log Group with configurable retention
+  ReaperLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-function'
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Application
+          Value: PackerResourceReaper
+
+  # CloudWatch Alarm for Lambda errors
+  ErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-errors'
+      AlarmDescription: Alarm when Packer Resource Reaper encounters errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ReaperFunction
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref NotificationTopic
+      OKActions:
+        - !Ref NotificationTopic
+
+  # CloudWatch Alarm for Lambda throttling
+  ThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-throttles'
+      AlarmDescription: Alarm when Packer Resource Reaper is throttled
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ReaperFunction
+      TreatMissingData: notBreaching
+
+Outputs:
+  ReaperFunctionArn:
+    Description: ARN of the Packer Resource Reaper Lambda function
+    Value: !GetAtt ReaperFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FunctionArn'
+
+  ReaperFunctionName:
+    Description: Name of the Packer Resource Reaper Lambda function
+    Value: !Ref ReaperFunction
+
+  NotificationTopicArn:
+    Description: ARN of the SNS notification topic
+    Value: !Ref NotificationTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-TopicArn'
+
+  LogGroupName:
+    Description: Name of the CloudWatch Log Group
+    Value: !Ref ReaperLogGroup
+
+  LambdaRoleArn:
+    Description: ARN of the Lambda execution role
+    Value: !GetAtt ReaperFunctionRole.Arn
+
+  ScheduleExpression:
+    Description: The configured schedule expression
+    Value: !Ref ScheduleExpression
+
+  DryRunMode:
+    Description: Whether dry-run mode is enabled
+    Value: !Ref DryRun
