@@ -90,7 +90,7 @@ The reaper is configured via environment variables set in the SAM template:
 |----------|-------------|---------|----------|
 | `MAX_INSTANCE_AGE_HOURS` | Maximum age (hours) before an instance is considered for cleanup | `2` | No |
 | `DRY_RUN` | Enable dry-run mode (`true`/`false`) | `true` | No |
-| `NOTIFICATION_TOPIC_ARN` | SNS topic ARN for notifications (also supports `SNS_TOPIC_ARN`) | Auto-created | No |
+| `SNS_TOPIC_ARN` | SNS topic ARN for notifications | Auto-created | No |
 | `KEY_PAIR_PATTERN` | Prefix pattern for identifying Packer resources | `packer_` | No |
 | `LOG_LEVEL` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) | `INFO` | No |
 | `BATCH_DELETE_SIZE` | Number of resources to delete concurrently per batch | `1` | No |

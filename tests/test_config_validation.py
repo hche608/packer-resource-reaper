@@ -7,7 +7,7 @@ The simplified configuration only supports:
 - MAX_INSTANCE_AGE_HOURS: Age threshold for cleanup (1-168 hours)
 - KEY_PAIR_PATTERN: Pattern for identifying Packer key pairs (default: packer_*)
 - DRY_RUN: Enable/disable dry-run mode
-- NOTIFICATION_TOPIC_ARN: SNS topic for notifications
+- SNS_TOPIC_ARN: SNS topic for notifications
 - AWS_REGION: AWS region for operations
 """
 
@@ -70,7 +70,6 @@ def clear_env_vars():
     env_vars = [
         "MAX_INSTANCE_AGE_HOURS",
         "DRY_RUN",
-        "NOTIFICATION_TOPIC_ARN",
         "SNS_TOPIC_ARN",
         "AWS_REGION",
         "KEY_PAIR_PATTERN",
@@ -176,7 +175,7 @@ def test_valid_sns_arn_parsing(sns_arn: str):
     Validates: Requirements 5.2
     """
     clear_env_vars()
-    os.environ["NOTIFICATION_TOPIC_ARN"] = sns_arn
+    os.environ["SNS_TOPIC_ARN"] = sns_arn
 
     config = ReaperConfig.from_environment(validate=False)
 

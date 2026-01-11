@@ -56,7 +56,6 @@ def clear_env_vars():
     env_vars = [
         "MAX_INSTANCE_AGE_HOURS",
         "DRY_RUN",
-        "NOTIFICATION_TOPIC_ARN",
         "SNS_TOPIC_ARN",
         "AWS_REGION",
         "KEY_PAIR_PATTERN",

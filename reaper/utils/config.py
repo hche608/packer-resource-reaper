@@ -95,11 +95,8 @@ class ReaperConfig:
         config.dry_run = dry_run_value in ("true", "1", "yes")
 
         # Parse notification topic ARN (Requirement 4.4)
-        config.notification_topic_arn = os.environ.get("NOTIFICATION_TOPIC_ARN", "")
-
-        # Also check SNS_TOPIC_ARN for compatibility with design doc
-        if not config.notification_topic_arn:
-            config.notification_topic_arn = os.environ.get("SNS_TOPIC_ARN", "")
+        # SNS_TOPIC_ARN is set by SAM template from auto-created topic
+        config.notification_topic_arn = os.environ.get("SNS_TOPIC_ARN", "")
 
         # Parse region (Requirement 8.6)
         # AWS_REGION is automatically set by Lambda runtime
