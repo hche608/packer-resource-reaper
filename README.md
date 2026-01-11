@@ -90,6 +90,8 @@ The reaper is configured via environment variables set in the SAM template:
 | `MAX_INSTANCE_AGE_HOURS` | Maximum age (hours) before an instance is considered for cleanup | `2` | No |
 | `DRY_RUN` | Enable dry-run mode (`true`/`false`) | `true` | No |
 | `SNS_TOPIC_ARN` | SNS topic ARN for notifications | Auto-created | No |
+| `LOG_LEVEL` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) | `INFO` | No |
+| `BATCH_DELETE_SIZE` | Number of resources to delete concurrently per batch | `1` | No |
 
 ### SAM Template Parameters
 
@@ -101,6 +103,8 @@ When deploying with `sam deploy --guided`, you'll be prompted for these paramete
 | `DryRun` | Enable dry-run mode | `true` | `true`, `false` |
 | `ScheduleExpression` | EventBridge schedule | `rate(1 hour)` | Any valid schedule expression |
 | `NotificationEmail` | Email for notifications | (empty) | Valid email address |
+| `LogLevel` | Logging verbosity | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
+| `BatchDeleteSize` | Resources to delete per batch | `1` | 1-50 |
 | `LogRetentionDays` | CloudWatch log retention | `30` | 1, 3, 5, 7, 14, 30, 60, 90, etc. |
 
 ### Configuration Examples
