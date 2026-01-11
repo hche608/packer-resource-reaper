@@ -11,6 +11,7 @@ A serverless application that automatically identifies and cleans up "zombie" EC
 ## Features
 
 - **Two-Criteria Filtering**: Instances must match BOTH key pair pattern (`packer_*`) AND age threshold
+- **Safety-First Filtering**: Explicit name checks for orphaned resources (Security Groups, Key Pairs) to prevent accidental production deletion
 - **Dependency-Aware Cleanup**: Terminates instances before deleting dependent resources
 - **Dry-Run Mode**: Test cleanup behavior without executing destructive operations
 - **SNS Notifications**: Notifications for all cleanup actions with resource details
@@ -89,9 +90,12 @@ The reaper is configured via environment variables set in the SAM template:
 |----------|-------------|---------|----------|
 | `MAX_INSTANCE_AGE_HOURS` | Maximum age (hours) before an instance is considered for cleanup | `2` | No |
 | `DRY_RUN` | Enable dry-run mode (`true`/`false`) | `true` | No |
-| `SNS_TOPIC_ARN` | SNS topic ARN for notifications | Auto-created | No |
+| `NOTIFICATION_TOPIC_ARN` | SNS topic ARN for notifications (also supports `SNS_TOPIC_ARN`) | Auto-created | No |
+| `KEY_PAIR_PATTERN` | Prefix pattern for identifying Packer resources | `packer_` | No |
 | `LOG_LEVEL` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) | `INFO` | No |
 | `BATCH_DELETE_SIZE` | Number of resources to delete concurrently per batch | `1` | No |
+
+> Note: `AWS_REGION` is automatically detected from the Lambda runtime environment.
 
 ### SAM Template Parameters
 
@@ -149,6 +153,8 @@ sam build && sam deploy --config-env prod
 ```
 
 ## Deployment
+
+For detailed deployment instructions, including manual steps and troubleshooting, see DEPLOYMENT.md.
 
 ### First-Time Deployment
 

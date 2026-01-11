@@ -54,7 +54,7 @@ class ReaperConfig:
     max_instance_age_hours: int = 2
     dry_run: bool = False
     notification_topic_arn: str = ""
-    region: str = "us-east-1"
+    region: str = ""  # Auto-detected from AWS_REGION or boto3 session
     key_pair_pattern: str = "packer_"
     log_level: str = "INFO"
     batch_delete_size: int = 1
@@ -102,7 +102,12 @@ class ReaperConfig:
             config.notification_topic_arn = os.environ.get("SNS_TOPIC_ARN", "")
 
         # Parse region (Requirement 8.6)
-        config.region = os.environ.get("AWS_REGION", "us-east-1")
+        # AWS_REGION is automatically set by Lambda runtime
+        # Fall back to boto3 session region if not set
+        config.region = os.environ.get("AWS_REGION", "")
+        if not config.region:
+            import boto3
+            config.region = boto3.Session().region_name or ""
 
         # Parse key pair pattern (default: "packer_") (Requirement 1.2)
         config.key_pair_pattern = os.environ.get("KEY_PAIR_PATTERN", "packer_")
