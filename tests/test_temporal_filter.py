@@ -7,7 +7,7 @@ The temporal filter identifies resources that exceed the configured
 MaxInstanceAge threshold. This is a simple age-based filter.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -60,7 +60,7 @@ def test_temporal_filter_age_threshold(instance_age_hours: int, max_age_hours: i
     Validates: Requirements 1.1
     """
     # Create instance with specific age
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     launch_time = now - timedelta(hours=instance_age_hours)
     instance = create_instance(launch_time=launch_time)
 
@@ -72,14 +72,14 @@ def test_temporal_filter_age_threshold(instance_age_hours: int, max_age_hours: i
 
     # Instance should be in result if age >= threshold
     if instance_age_hours >= max_age_hours:
-        assert (
-            len(result) == 1
-        ), f"Instance aged {instance_age_hours}h should be filtered with threshold {max_age_hours}h"
+        assert len(result) == 1, (
+            f"Instance aged {instance_age_hours}h should be filtered with threshold {max_age_hours}h"
+        )
         assert result[0].resource_id == instance.resource_id
     else:
-        assert (
-            len(result) == 0
-        ), f"Instance aged {instance_age_hours}h should NOT be filtered with threshold {max_age_hours}h"
+        assert len(result) == 0, (
+            f"Instance aged {instance_age_hours}h should NOT be filtered with threshold {max_age_hours}h"
+        )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -95,7 +95,7 @@ def test_temporal_filter_boundary_condition(max_age_hours: int):
 
     Validates: Requirements 1.1
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Create instance exactly at threshold
     launch_time = now - timedelta(hours=max_age_hours)
@@ -104,9 +104,7 @@ def test_temporal_filter_boundary_condition(max_age_hours: int):
     temporal_filter = TemporalFilter(max_age_hours=max_age_hours)
     result = temporal_filter.filter_instances([instance])
 
-    assert (
-        len(result) == 1
-    ), f"Instance exactly at threshold {max_age_hours}h should be filtered"
+    assert len(result) == 1, f"Instance exactly at threshold {max_age_hours}h should be filtered"
 
 
 @settings(max_examples=100, deadline=5000)
@@ -122,7 +120,7 @@ def test_temporal_filter_just_under_threshold(max_age_hours: int):
 
     Validates: Requirements 1.1
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Create instance just under threshold (1 minute less)
     launch_time = now - timedelta(hours=max_age_hours) + timedelta(minutes=1)
@@ -131,9 +129,9 @@ def test_temporal_filter_just_under_threshold(max_age_hours: int):
     temporal_filter = TemporalFilter(max_age_hours=max_age_hours)
     result = temporal_filter.filter_instances([instance])
 
-    assert (
-        len(result) == 0
-    ), f"Instance just under threshold {max_age_hours}h should NOT be filtered"
+    assert len(result) == 0, (
+        f"Instance just under threshold {max_age_hours}h should NOT be filtered"
+    )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -150,7 +148,7 @@ def test_temporal_filter_multiple_instances(num_instances: int, max_age_hours: i
 
     Validates: Requirements 1.1
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     instances = []
     expected_filtered_count = 0
 
@@ -167,17 +165,15 @@ def test_temporal_filter_multiple_instances(num_instances: int, max_age_hours: i
             age_hours = max(0.5, max_age_hours / 2 - i)
 
         launch_time = now - timedelta(hours=age_hours)
-        instance = create_instance(
-            launch_time=launch_time, instance_id=f"i-test{i:03d}"
-        )
+        instance = create_instance(launch_time=launch_time, instance_id=f"i-test{i:03d}")
         instances.append(instance)
 
     temporal_filter = TemporalFilter(max_age_hours=max_age_hours)
     result = temporal_filter.filter_instances(instances)
 
-    assert (
-        len(result) == expected_filtered_count
-    ), f"Expected {expected_filtered_count} filtered instances, got {len(result)}"
+    assert len(result) == expected_filtered_count, (
+        f"Expected {expected_filtered_count} filtered instances, got {len(result)}"
+    )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -213,7 +209,7 @@ def test_temporal_filter_is_deterministic(instance_age_hours: int, max_age_hours
 
     Validates: Requirements 1.1
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     launch_time = now - timedelta(hours=instance_age_hours)
     instance = create_instance(launch_time=launch_time)
 
@@ -253,7 +249,7 @@ def test_temporal_filter_ignores_tags(instance_age_hours: int, max_age_hours: in
 
     Validates: Requirements 1.1
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     launch_time = now - timedelta(hours=instance_age_hours)
 
     # Create instance with various tags

@@ -17,8 +17,9 @@ Key features:
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Any, TypeVar
 
 from reaper.cleanup.batch_processor import BatchProcessor
 from reaper.cleanup.dry_run import DryRunExecutor, DryRunReport
@@ -39,6 +40,8 @@ from reaper.utils.aws_client import RetryStrategy
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
+
 
 @dataclass
 class AssociatedResources:
@@ -49,10 +52,10 @@ class AssociatedResources:
     """
 
     instance_id: str
-    security_group_ids: List[str] = field(default_factory=list)
-    key_pair_name: Optional[str] = None
-    volume_ids: List[str] = field(default_factory=list)
-    eip_allocation_ids: List[str] = field(default_factory=list)
+    security_group_ids: list[str] = field(default_factory=list)
+    key_pair_name: str | None = None
+    volume_ids: list[str] = field(default_factory=list)
+    eip_allocation_ids: list[str] = field(default_factory=list)
 
 
 class CleanupEngine:
@@ -81,11 +84,12 @@ class CleanupEngine:
         self,
         ec2_client: Any,
         dry_run: bool = False,
-        retry_strategy: Optional[RetryStrategy] = None,
+        retry_strategy: RetryStrategy | None = None,
         account_id: str = "",
         region: str = "",
-        iam_client: Optional[Any] = None,
+        iam_client: Any | None = None,
         batch_delete_size: int = 1,
+        max_resource_age_hours: int = 2,
     ):
         """
         Initialize cleanup engine.
@@ -98,6 +102,7 @@ class CleanupEngine:
             region: AWS region for dry-run reporting
             iam_client: Optional Boto3 IAM client for instance profile cleanup
             batch_delete_size: Batch size for concurrent deletions (Requirement 12.1)
+            max_resource_age_hours: Age threshold for orphaned resources (default: 2)
         """
         self.dry_run = dry_run
         self.ec2_client = ec2_client
@@ -105,6 +110,7 @@ class CleanupEngine:
         self.account_id = account_id
         self.region = region
         self.batch_delete_size = max(1, batch_delete_size)
+        self.max_resource_age_hours = max(1, max_resource_age_hours)
         self.retry_strategy = retry_strategy or RetryStrategy(
             max_retries=3,
             base_delay=1.0,
@@ -124,7 +130,8 @@ class CleanupEngine:
         self.iam_manager = IAMManager(iam_client, dry_run) if iam_client else None
 
         # Initialize orphan manager for Phase 2 cleanup (Requirement 10.7)
-        self.orphan_manager = OrphanManager(ec2_client, iam_client, dry_run)
+        # Pass age threshold to prevent race conditions with active Packer builds
+        self.orphan_manager = OrphanManager(ec2_client, iam_client, dry_run, max_resource_age_hours)
 
         # Initialize dry-run executor for comprehensive logging
         self.dry_run_executor = DryRunExecutor(
@@ -133,7 +140,7 @@ class CleanupEngine:
         )
 
         # Store last orphan cleanup result for notifications
-        self._last_orphan_cleanup_result: Optional[OrphanCleanupResult] = None
+        self._last_orphan_cleanup_result: OrphanCleanupResult | None = None
 
     def cleanup_resources(self, resources: ResourceCollection) -> CleanupResult:
         """
@@ -193,9 +200,7 @@ class CleanupEngine:
         if resources.is_empty():
             logger.info("No resources to clean up in Phase 1")
         else:
-            logger.info(
-                f"Phase 1: Starting cleanup of {resources.total_count()} resources"
-            )
+            logger.info(f"Phase 1: Starting cleanup of {resources.total_count()} resources")
 
             # Step 1 & 2: Process instances - collect associated resources and terminate
             # This implements Requirements 2.1, 2.2, 2.3, 2.5, 2.7
@@ -269,7 +274,7 @@ class CleanupEngine:
         # Merge errors
         result.errors.update(orphan_result.errors)
 
-    def get_last_orphan_cleanup_result(self) -> Optional[OrphanCleanupResult]:
+    def get_last_orphan_cleanup_result(self) -> OrphanCleanupResult | None:
         """
         Get the last orphan cleanup result.
 
@@ -281,7 +286,7 @@ class CleanupEngine:
         """
         return self._last_orphan_cleanup_result
 
-    def _execute_with_retry(self, operation, *args, **kwargs):
+    def _execute_with_retry(self, operation: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         """
         Execute an operation with retry logic.
 
@@ -298,9 +303,7 @@ class CleanupEngine:
         """
         return self.retry_strategy.execute_with_retry(operation, *args, **kwargs)
 
-    def collect_associated_resources(
-        self, instance: PackerInstance
-    ) -> AssociatedResources:
+    def collect_associated_resources(self, instance: PackerInstance) -> AssociatedResources:
         """
         Collect resources directly associated with an instance.
 
@@ -401,9 +404,7 @@ class CleanupEngine:
             return
 
         # Terminate instances
-        terminated, deferred, errors = self.ec2_manager.terminate_instances(
-            instances_to_terminate
-        )
+        terminated, deferred, errors = self.ec2_manager.terminate_instances(instances_to_terminate)
 
         result.terminated_instances.extend(terminated)
         result.deferred_resources.extend(deferred)
@@ -428,51 +429,37 @@ class CleanupEngine:
         result.deferred_resources.extend(deferred)
         result.errors.update(errors)
 
-    def _cleanup_key_pairs(
-        self, resources: ResourceCollection, result: CleanupResult
-    ) -> None:
+    def _cleanup_key_pairs(self, resources: ResourceCollection, result: CleanupResult) -> None:
         """Delete key pairs."""
         logger.info(f"Deleting {len(resources.key_pairs)} key pairs")
 
-        deleted, deferred, errors = self.network_manager.delete_key_pairs(
-            resources.key_pairs
-        )
+        deleted, deferred, errors = self.network_manager.delete_key_pairs(resources.key_pairs)
 
         result.deleted_key_pairs.extend(deleted)
         result.deferred_resources.extend(deferred)
         result.errors.update(errors)
 
-    def _cleanup_elastic_ips(
-        self, resources: ResourceCollection, result: CleanupResult
-    ) -> None:
+    def _cleanup_elastic_ips(self, resources: ResourceCollection, result: CleanupResult) -> None:
         """Release elastic IPs."""
         logger.info(f"Releasing {len(resources.elastic_ips)} elastic IPs")
 
-        released, deferred, errors = self.network_manager.release_elastic_ips(
-            resources.elastic_ips
-        )
+        released, deferred, errors = self.network_manager.release_elastic_ips(resources.elastic_ips)
 
         result.released_elastic_ips.extend(released)
         result.deferred_resources.extend(deferred)
         result.errors.update(errors)
 
-    def _cleanup_volumes(
-        self, resources: ResourceCollection, result: CleanupResult
-    ) -> None:
+    def _cleanup_volumes(self, resources: ResourceCollection, result: CleanupResult) -> None:
         """Delete EBS volumes."""
         logger.info(f"Deleting {len(resources.volumes)} volumes")
 
-        deleted, deferred, errors = self.storage_manager.delete_volumes(
-            resources.volumes
-        )
+        deleted, deferred, errors = self.storage_manager.delete_volumes(resources.volumes)
 
         result.deleted_volumes.extend(deleted)
         result.deferred_resources.extend(deferred)
         result.errors.update(errors)
 
-    def _cleanup_snapshots(
-        self, resources: ResourceCollection, result: CleanupResult
-    ) -> None:
+    def _cleanup_snapshots(self, resources: ResourceCollection, result: CleanupResult) -> None:
         """Delete EBS snapshots."""
         logger.info(f"Deleting {len(resources.snapshots)} snapshots")
 
@@ -499,9 +486,7 @@ class CleanupEngine:
         logger.info(f"Deleting {len(resources.instance_profiles)} instance profiles")
 
         if not self.iam_manager:
-            logger.warning(
-                "IAM manager not initialized, skipping instance profile cleanup"
-            )
+            logger.warning("IAM manager not initialized, skipping instance profile cleanup")
             return
 
         deleted, deferred, errors = self.iam_manager.delete_instance_profiles(
@@ -512,7 +497,7 @@ class CleanupEngine:
         result.deferred_resources.extend(deferred)
         result.errors.update(errors)
 
-    def get_last_dry_run_report(self) -> Optional[DryRunReport]:
+    def get_last_dry_run_report(self) -> DryRunReport | None:
         """
         Get the last dry-run report generated by cleanup_resources.
 

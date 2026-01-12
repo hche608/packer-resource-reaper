@@ -11,11 +11,15 @@ Key features:
 - Execute as Phase 2 after primary zombie instance cleanup (Requirement 10.7)
 - Respect dry-run mode for all operations (Requirement 10.8)
 - Log and notify about orphaned resource cleanup (Requirements 10.9, 10.10)
+
+SAFETY: All orphaned resources must meet an age threshold before deletion to prevent
+race conditions with active Packer builds that are still provisioning.
 """
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from botocore.exceptions import ClientError
 
@@ -30,9 +34,9 @@ class OrphanedResources:
     primary zombie instance cleanup completes.
     """
 
-    orphaned_key_pairs: List[str] = field(default_factory=list)
-    orphaned_security_groups: List[str] = field(default_factory=list)
-    orphaned_iam_roles: List[str] = field(default_factory=list)
+    orphaned_key_pairs: list[str] = field(default_factory=list)
+    orphaned_security_groups: list[str] = field(default_factory=list)
+    orphaned_iam_roles: list[str] = field(default_factory=list)
 
     def is_empty(self) -> bool:
         """Check if there are no orphaned resources."""
@@ -55,11 +59,11 @@ class OrphanedResources:
 class OrphanCleanupResult:
     """Result of orphaned resource cleanup operations."""
 
-    deleted_key_pairs: List[str] = field(default_factory=list)
-    deleted_security_groups: List[str] = field(default_factory=list)
-    deleted_iam_roles: List[str] = field(default_factory=list)
-    deferred_resources: List[str] = field(default_factory=list)
-    errors: Dict[str, str] = field(default_factory=dict)
+    deleted_key_pairs: list[str] = field(default_factory=list)
+    deleted_security_groups: list[str] = field(default_factory=list)
+    deleted_iam_roles: list[str] = field(default_factory=list)
+    deferred_resources: list[str] = field(default_factory=list)
+    errors: dict[str, str] = field(default_factory=dict)
     dry_run: bool = False
 
     def total_cleaned(self) -> int:
@@ -96,8 +100,9 @@ class OrphanManager:
     def __init__(
         self,
         ec2_client: Any,
-        iam_client: Optional[Any] = None,
+        iam_client: Any | None = None,
         dry_run: bool = False,
+        max_resource_age_hours: int = 2,
     ):
         """
         Initialize orphan manager.
@@ -106,10 +111,14 @@ class OrphanManager:
             ec2_client: Boto3 EC2 client
             iam_client: Optional Boto3 IAM client for role cleanup
             dry_run: If True, simulate operations without executing
+            max_resource_age_hours: Minimum age in hours before orphaned resources
+                can be deleted. This prevents race conditions with active Packer
+                builds that are still provisioning. Defaults to 2 hours.
         """
         self.ec2 = ec2_client
         self.iam = iam_client
         self.dry_run = dry_run
+        self.max_resource_age_hours = max(1, max_resource_age_hours)  # Minimum 1 hour
 
     def scan_orphaned_resources(self) -> OrphanedResources:
         """
@@ -144,7 +153,7 @@ class OrphanManager:
 
         return orphaned
 
-    def scan_orphaned_key_pairs(self) -> List[str]:
+    def scan_orphaned_key_pairs(self) -> list[str]:
         """
         Identify key pairs starting with 'packer_' not used by any instance.
 
@@ -183,22 +192,35 @@ class OrphanManager:
 
         return orphaned_key_pairs
 
-    def _get_packer_key_pairs(self) -> List[str]:
-        """Get all key pairs starting with packer_ prefix."""
+    def _get_packer_key_pairs(self) -> list[str]:
+        """Get all key pairs starting with packer_ prefix that meet age threshold.
+
+        SAFETY: Only returns key pairs that are older than max_resource_age_hours to prevent
+        race conditions with active Packer builds that are still provisioning.
+        """
         packer_key_pairs = []
+        cutoff_time = datetime.now(UTC) - timedelta(hours=self.max_resource_age_hours)
 
         try:
             response = self.ec2.describe_key_pairs()
             for kp in response.get("KeyPairs", []):
                 key_name = kp.get("KeyName", "")
                 if key_name.startswith(self.PACKER_KEY_PATTERN):
+                    # SAFETY: Check key pair age before considering for cleanup
+                    create_time = kp.get("CreateTime")
+                    if create_time and create_time > cutoff_time:
+                        logger.debug(
+                            f"Skipping key pair {key_name}: too young "
+                            f"(created {create_time}, cutoff {cutoff_time})"
+                        )
+                        continue
                     packer_key_pairs.append(key_name)
         except Exception as e:
             logger.error(f"Error getting packer key pairs: {e}")
 
         return packer_key_pairs
 
-    def _get_key_pairs_in_use(self) -> Set[str]:
+    def _get_key_pairs_in_use(self) -> set[str]:
         """Get key pairs currently in use by running or pending instances."""
         in_use_key_pairs = set()
 
@@ -206,9 +228,7 @@ class OrphanManager:
             # Only check running and pending instances
             paginator = self.ec2.get_paginator("describe_instances")
             for page in paginator.paginate(
-                Filters=[
-                    {"Name": "instance-state-name", "Values": ["running", "pending"]}
-                ]
+                Filters=[{"Name": "instance-state-name", "Values": ["running", "pending"]}]
             ):
                 for reservation in page.get("Reservations", []):
                     for instance in reservation.get("Instances", []):
@@ -220,7 +240,7 @@ class OrphanManager:
 
         return in_use_key_pairs
 
-    def scan_orphaned_security_groups(self) -> List[str]:
+    def scan_orphaned_security_groups(self) -> list[str]:
         """
         Identify security groups with 'packer' in name/description not attached.
 
@@ -260,7 +280,7 @@ class OrphanManager:
 
         return orphaned_security_groups
 
-    def _get_packer_security_groups(self) -> List[str]:
+    def _get_packer_security_groups(self) -> list[str]:
         """Get all security groups with packer in name or description."""
         packer_security_groups = []
 
@@ -286,7 +306,7 @@ class OrphanManager:
 
         return packer_security_groups
 
-    def _get_security_groups_in_use(self) -> Set[str]:
+    def _get_security_groups_in_use(self) -> set[str]:
         """Get security groups currently attached to instances or network interfaces."""
         in_use_security_groups = set()
 
@@ -324,7 +344,7 @@ class OrphanManager:
 
         return in_use_security_groups
 
-    def scan_orphaned_iam_roles(self) -> List[str]:
+    def scan_orphaned_iam_roles(self) -> list[str]:
         """
         Identify IAM roles starting with 'packer_' not in any active instance profile.
 
@@ -367,30 +387,46 @@ class OrphanManager:
 
         return orphaned_iam_roles
 
-    def _get_packer_iam_roles(self) -> List[str]:
-        """Get all IAM roles starting with packer_ or packer- prefix."""
-        packer_roles = []
+    def _get_packer_iam_roles(self) -> list[str]:
+        """Get all IAM roles starting with packer_ or packer- prefix that meet age threshold.
+
+        SAFETY: Only returns roles that are older than max_resource_age_hours to prevent
+        race conditions with active Packer builds that are still provisioning.
+        """
+        packer_roles: list[str] = []
+        cutoff_time = datetime.now(UTC) - timedelta(hours=self.max_resource_age_hours)
+
+        if self.iam is None:
+            return packer_roles
 
         try:
             paginator = self.iam.get_paginator("list_roles")
             for page in paginator.paginate():
                 for role in page.get("Roles", []):
-                    role_name = role.get("RoleName", "")
+                    role_name: str = role.get("RoleName", "")
                     # Skip the reaper's own role
                     if role_name.startswith(self.REAPER_RESOURCE_PREFIX):
                         continue
                     # Check for both packer_ and packer- prefixes
                     if any(
-                        role_name.startswith(prefix)
-                        for prefix in self.PACKER_IAM_ROLE_PATTERNS
+                        role_name.startswith(prefix) for prefix in self.PACKER_IAM_ROLE_PATTERNS
                     ):
+                        # SAFETY: Check role age before considering for cleanup
+                        # CreateDate is already a datetime object from boto3
+                        create_date = role.get("CreateDate")
+                        if create_date and create_date > cutoff_time:
+                            logger.debug(
+                                f"Skipping IAM role {role_name}: too young "
+                                f"(created {create_date}, cutoff {cutoff_time})"
+                            )
+                            continue
                         packer_roles.append(role_name)
         except Exception as e:
             logger.error(f"Error getting packer IAM roles: {e}")
 
         return packer_roles
 
-    def _get_iam_roles_in_use(self) -> Set[str]:
+    def _get_iam_roles_in_use(self) -> set[str]:
         """Get IAM roles currently in use by instance profiles attached to instances."""
         in_use_roles = set()
 
@@ -400,9 +436,7 @@ class OrphanManager:
 
             paginator = self.ec2.get_paginator("describe_instances")
             for page in paginator.paginate(
-                Filters=[
-                    {"Name": "instance-state-name", "Values": ["running", "pending"]}
-                ]
+                Filters=[{"Name": "instance-state-name", "Values": ["running", "pending"]}]
             ):
                 for reservation in page.get("Reservations", []):
                     for instance in reservation.get("Instances", []):
@@ -411,7 +445,7 @@ class OrphanManager:
                             instance_profile_arns.add(iam_profile.get("Arn", ""))
 
             # Get roles from those instance profiles
-            if instance_profile_arns:
+            if instance_profile_arns and self.iam is not None:
                 iam_paginator = self.iam.get_paginator("list_instance_profiles")
                 for page in iam_paginator.paginate():
                     for profile in page.get("InstanceProfiles", []):
@@ -424,9 +458,7 @@ class OrphanManager:
 
         return in_use_roles
 
-    def cleanup_orphaned_resources(
-        self, orphaned: OrphanedResources
-    ) -> OrphanCleanupResult:
+    def cleanup_orphaned_resources(self, orphaned: OrphanedResources) -> OrphanCleanupResult:
         """
         Delete orphaned resources after confirming no dependencies exist.
 
@@ -449,9 +481,7 @@ class OrphanManager:
             logger.info("No orphaned resources to clean up")
             return result
 
-        logger.info(
-            f"Starting orphaned resource cleanup for {orphaned.total_count()} resources"
-        )
+        logger.info(f"Starting orphaned resource cleanup for {orphaned.total_count()} resources")
 
         # Delete orphaned key pairs (Requirement 10.4)
         if orphaned.orphaned_key_pairs:
@@ -459,9 +489,7 @@ class OrphanManager:
 
         # Delete orphaned security groups (Requirement 10.5)
         if orphaned.orphaned_security_groups:
-            self._cleanup_orphaned_security_groups(
-                orphaned.orphaned_security_groups, result
-            )
+            self._cleanup_orphaned_security_groups(orphaned.orphaned_security_groups, result)
 
         # Delete orphaned IAM roles (Requirement 10.6)
         if orphaned.orphaned_iam_roles and self.iam:
@@ -475,7 +503,7 @@ class OrphanManager:
         return result
 
     def _cleanup_orphaned_key_pairs(
-        self, key_pairs: List[str], result: OrphanCleanupResult
+        self, key_pairs: list[str], result: OrphanCleanupResult
     ) -> None:
         """Delete orphaned key pairs after confirming no instance references."""
         logger.info(f"Cleaning up {len(key_pairs)} orphaned key pairs")
@@ -525,7 +553,7 @@ class OrphanManager:
         return False
 
     def _cleanup_orphaned_security_groups(
-        self, security_groups: List[str], result: OrphanCleanupResult
+        self, security_groups: list[str], result: OrphanCleanupResult
     ) -> None:
         """Delete orphaned security groups after confirming no dependencies."""
         logger.info(f"Cleaning up {len(security_groups)} orphaned security groups")
@@ -539,9 +567,7 @@ class OrphanManager:
                     continue
 
                 if self.dry_run:
-                    logger.info(
-                        f"[DRY RUN] Would delete orphaned security group: {sg_id}"
-                    )
+                    logger.info(f"[DRY RUN] Would delete orphaned security group: {sg_id}")
                     result.deleted_security_groups.append(sg_id)
                 else:
                     logger.info(f"Deleting orphaned security group: {sg_id}")
@@ -598,7 +624,7 @@ class OrphanManager:
         return False
 
     def _cleanup_orphaned_iam_roles(
-        self, iam_roles: List[str], result: OrphanCleanupResult
+        self, iam_roles: list[str], result: OrphanCleanupResult
     ) -> None:
         """Delete orphaned IAM roles with policy detachment before deletion."""
         logger.info(f"Cleaning up {len(iam_roles)} orphaned IAM roles")
@@ -612,9 +638,7 @@ class OrphanManager:
                     continue
 
                 if self.dry_run:
-                    logger.info(
-                        f"[DRY RUN] Would delete orphaned IAM role: {role_name}"
-                    )
+                    logger.info(f"[DRY RUN] Would delete orphaned IAM role: {role_name}")
                     result.deleted_iam_roles.append(role_name)
                 else:
                     # Delete the role (with policy detachment)
@@ -638,6 +662,9 @@ class OrphanManager:
 
     def _is_iam_role_in_use(self, role_name: str) -> bool:
         """Check if an IAM role is currently in use by any instance profile attached to instances."""
+        if self.iam is None:
+            return False
+
         try:
             # Get instance profiles for this role
             response = self.iam.list_instance_profiles_for_role(RoleName=role_name)
@@ -651,9 +678,7 @@ class OrphanManager:
 
             paginator = self.ec2.get_paginator("describe_instances")
             for page in paginator.paginate(
-                Filters=[
-                    {"Name": "instance-state-name", "Values": ["running", "pending"]}
-                ]
+                Filters=[{"Name": "instance-state-name", "Values": ["running", "pending"]}]
             ):
                 for reservation in page.get("Reservations", []):
                     for instance in reservation.get("Instances", []):
@@ -675,6 +700,10 @@ class OrphanManager:
         This implements Requirement 10.6: detach all policies and delete the role
         after confirming no instance profiles reference them.
         """
+        if self.iam is None:
+            logger.warning(f"IAM client not available, cannot delete role {role_name}")
+            return
+
         logger.info(f"Deleting orphaned IAM role: {role_name}")
 
         # Step 1: Remove role from all instance profiles
@@ -682,9 +711,7 @@ class OrphanManager:
             response = self.iam.list_instance_profiles_for_role(RoleName=role_name)
             for profile in response.get("InstanceProfiles", []):
                 profile_name = profile["InstanceProfileName"]
-                logger.info(
-                    f"Removing role {role_name} from instance profile {profile_name}"
-                )
+                logger.info(f"Removing role {role_name} from instance profile {profile_name}")
                 self.iam.remove_role_from_instance_profile(
                     InstanceProfileName=profile_name, RoleName=role_name
                 )
@@ -707,9 +734,7 @@ class OrphanManager:
         try:
             response = self.iam.list_role_policies(RoleName=role_name)
             for policy_name in response.get("PolicyNames", []):
-                logger.info(
-                    f"Deleting inline policy {policy_name} from role {role_name}"
-                )
+                logger.info(f"Deleting inline policy {policy_name} from role {role_name}")
                 self.iam.delete_role_policy(RoleName=role_name, PolicyName=policy_name)
         except ClientError as e:
             if e.response.get("Error", {}).get("Code") != "NoSuchEntity":

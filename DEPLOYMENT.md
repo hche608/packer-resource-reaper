@@ -20,12 +20,12 @@ This guide provides detailed instructions for deploying the AWS Packer Resource 
    ```bash
    # Install on macOS
    brew install awscli
-   
+
    # Install on Linux
    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
    unzip awscliv2.zip
    sudo ./aws/install
-   
+
    # Verify installation
    aws --version
    ```
@@ -34,10 +34,10 @@ This guide provides detailed instructions for deploying the AWS Packer Resource 
    ```bash
    # Install on macOS
    brew install aws-sam-cli
-   
+
    # Install on Linux
    pip install aws-sam-cli
-   
+
    # Verify installation
    sam --version
    ```
@@ -51,7 +51,7 @@ This guide provides detailed instructions for deploying the AWS Packer Resource 
    ```bash
    # Install uv
    curl -LsSf https://astral.sh/uv/install.sh | sh
-   
+
    # Verify installation
    uv --version
    ```
@@ -354,7 +354,7 @@ If stack deletion fails, manually delete:
    # List and delete policies
    aws iam list-role-policies --role-name packer-resource-reaper-lambda-role
    aws iam delete-role-policy --role-name packer-resource-reaper-lambda-role --policy-name <policy-name>
-   
+
    # Delete role
    aws iam delete-role --role-name packer-resource-reaper-lambda-role
    ```

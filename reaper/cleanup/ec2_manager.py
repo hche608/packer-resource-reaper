@@ -6,7 +6,7 @@ hung and rebooting instances as per Requirements 2.1, 2.3, 2.5, 6.4.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from reaper.models import PackerInstance, ResourceType
 
@@ -47,8 +47,8 @@ class EC2Manager:
         self,
         account_id: str,
         region: str,
-        filters: Optional[List[Dict[str, Any]]] = None,
-    ) -> List[PackerInstance]:
+        filters: list[dict[str, Any]] | None = None,
+    ) -> list[PackerInstance]:
         """
         Scan EC2 instances in the account.
 
@@ -89,8 +89,7 @@ class EC2Manager:
                                 state=state,
                                 vpc_id=instance.get("VpcId", ""),
                                 security_groups=[
-                                    sg["GroupId"]
-                                    for sg in instance.get("SecurityGroups", [])
+                                    sg["GroupId"] for sg in instance.get("SecurityGroups", [])
                                 ],
                                 key_name=instance.get("KeyName"),
                                 launch_time=instance["LaunchTime"],
@@ -102,7 +101,7 @@ class EC2Manager:
         logger.info(f"Scanned {len(instances)} instances")
         return instances
 
-    def get_instance_details(self, instance_id: str) -> Optional[Dict[str, Any]]:
+    def get_instance_details(self, instance_id: str) -> dict[str, Any] | None:
         """
         Get detailed information about a specific instance.
 
@@ -116,12 +115,13 @@ class EC2Manager:
             response = self.ec2.describe_instances(InstanceIds=[instance_id])
             reservations = response.get("Reservations", [])
             if reservations and reservations[0].get("Instances"):
-                return reservations[0]["Instances"][0]
+                instance_data: dict[str, Any] = reservations[0]["Instances"][0]
+                return instance_data
         except Exception as e:
             logger.error(f"Error getting details for instance {instance_id}: {e}")
         return None
 
-    def get_associated_resources(self, instance: PackerInstance) -> Dict[str, Any]:
+    def get_associated_resources(self, instance: PackerInstance) -> dict[str, Any]:
         """
         Get resources directly associated with an instance.
 
@@ -135,22 +135,16 @@ class EC2Manager:
         Returns:
             Dict with associated resource IDs
         """
-        associated = {
-            "security_group_ids": list(instance.security_groups),
-            "key_pair_name": instance.key_name,
-            "volume_ids": [],
-            "eip_allocation_ids": [],
-        }
+        volume_ids: list[str] = []
+        eip_allocation_ids: list[str] = []
 
         # Get attached volumes
         try:
             response = self.ec2.describe_volumes(
-                Filters=[
-                    {"Name": "attachment.instance-id", "Values": [instance.resource_id]}
-                ]
+                Filters=[{"Name": "attachment.instance-id", "Values": [instance.resource_id]}]
             )
             for volume in response.get("Volumes", []):
-                associated["volume_ids"].append(volume["VolumeId"])
+                volume_ids.append(volume["VolumeId"])
         except Exception as e:
             logger.warning(f"Error getting volumes for {instance.resource_id}: {e}")
 
@@ -161,15 +155,21 @@ class EC2Manager:
             )
             for address in response.get("Addresses", []):
                 if address.get("AllocationId"):
-                    associated["eip_allocation_ids"].append(address["AllocationId"])
+                    eip_allocation_ids.append(address["AllocationId"])
         except Exception as e:
             logger.warning(f"Error getting EIPs for {instance.resource_id}: {e}")
 
+        associated: dict[str, Any] = {
+            "security_group_ids": list(instance.security_groups),
+            "key_pair_name": instance.key_name,
+            "volume_ids": volume_ids,
+            "eip_allocation_ids": eip_allocation_ids,
+        }
         return associated
 
     def terminate_instances(
-        self, instances: List[PackerInstance]
-    ) -> tuple[List[str], List[str], dict]:
+        self, instances: list[PackerInstance]
+    ) -> tuple[list[str], list[str], dict[str, str]]:
         """
         Terminate EC2 instances.
 
@@ -225,20 +225,21 @@ class EC2Manager:
         logger.warning(f"Instance {instance_id} in unexpected state: {current_state}")
         return "deferred"
 
-    def get_instance_state(self, instance_id: str) -> Optional[str]:
+    def get_instance_state(self, instance_id: str) -> str | None:
         """Get current state of an instance."""
         try:
             response = self.ec2.describe_instances(InstanceIds=[instance_id])
             reservations = response.get("Reservations", [])
             if reservations and reservations[0].get("Instances"):
-                return reservations[0]["Instances"][0]["State"]["Name"]
+                state: str = reservations[0]["Instances"][0]["State"]["Name"]
+                return state
         except Exception as e:
             logger.error(f"Error getting state for instance {instance_id}: {e}")
         return None
 
     def wait_for_termination(
-        self, instance_ids: List[str], timeout_seconds: int = 300
-    ) -> dict:
+        self, instance_ids: list[str], timeout_seconds: int = 300
+    ) -> dict[str, str]:
         """
         Wait for instances to reach terminated state.
 

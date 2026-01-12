@@ -273,21 +273,13 @@ def test_property12_debug_level_outputs_detailed_info(log_level: str, caplog):
     if log_level == "DEBUG":
         # DEBUG level should capture debug messages
         assert "Detailed API call" in output, "DEBUG level should output API calls"
-        assert (
-            "Resource attributes" in output
-        ), "DEBUG level should output resource attributes"
+        assert "Resource attributes" in output, "DEBUG level should output resource attributes"
         assert "Processing step" in output, "DEBUG level should output processing steps"
     else:
         # INFO level should not capture debug messages
-        assert (
-            "Detailed API call" not in output
-        ), "INFO level should not output DEBUG messages"
-        assert (
-            "Resource attributes" not in output
-        ), "INFO level should not output DEBUG messages"
-        assert (
-            "Processing step" not in output
-        ), "INFO level should not output DEBUG messages"
+        assert "Detailed API call" not in output, "INFO level should not output DEBUG messages"
+        assert "Resource attributes" not in output, "INFO level should not output DEBUG messages"
+        assert "Processing step" not in output, "INFO level should not output DEBUG messages"
 
 
 @settings(
@@ -384,9 +376,7 @@ def test_property12_empty_log_level_defaults_to_info():
     max_age=st.integers(min_value=1, max_value=168),
     dry_run=st.booleans(),
 )
-def test_property12_log_level_with_other_config(
-    log_level: str, max_age: int, dry_run: bool
-):
+def test_property12_log_level_with_other_config(log_level: str, max_age: int, dry_run: bool):
     """
     Feature: packer-resource-reaper, Property 12: Log Level Configuration
 

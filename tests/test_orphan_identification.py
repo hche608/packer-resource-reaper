@@ -9,7 +9,6 @@ This module tests that the OrphanManager correctly identifies orphaned Packer re
 - IAM roles starting with `packer_` not in any active instance profiles (10.3)
 """
 
-from typing import Dict, List
 from unittest.mock import MagicMock
 
 from hypothesis import given, settings
@@ -49,24 +48,20 @@ non_packer_sg_name = st.builds(
 
 
 def create_mock_ec2_client(
-    key_pairs: List[str],
-    running_instances: List[Dict],
-    security_groups: List[Dict],
-    network_interfaces: List[Dict],
+    key_pairs: list[str],
+    running_instances: list[dict],
+    security_groups: list[dict],
+    network_interfaces: list[dict],
 ) -> MagicMock:
     """Create a mock EC2 client with specified resources."""
     mock_ec2 = MagicMock()
 
     # Mock describe_key_pairs
-    mock_ec2.describe_key_pairs.return_value = {
-        "KeyPairs": [{"KeyName": kp} for kp in key_pairs]
-    }
+    mock_ec2.describe_key_pairs.return_value = {"KeyPairs": [{"KeyName": kp} for kp in key_pairs]}
 
     # Mock describe_instances paginator
     mock_paginator = MagicMock()
-    mock_paginator.paginate.return_value = [
-        {"Reservations": [{"Instances": running_instances}]}
-    ]
+    mock_paginator.paginate.return_value = [{"Reservations": [{"Instances": running_instances}]}]
 
     # Mock describe_security_groups paginator
     mock_sg_paginator = MagicMock()
@@ -74,9 +69,7 @@ def create_mock_ec2_client(
 
     # Mock describe_network_interfaces paginator
     mock_ni_paginator = MagicMock()
-    mock_ni_paginator.paginate.return_value = [
-        {"NetworkInterfaces": network_interfaces}
-    ]
+    mock_ni_paginator.paginate.return_value = [{"NetworkInterfaces": network_interfaces}]
 
     def get_paginator(operation):
         if operation == "describe_instances":
@@ -93,17 +86,15 @@ def create_mock_ec2_client(
 
 
 def create_mock_iam_client(
-    roles: List[str],
-    instance_profiles_for_roles: Dict[str, List[str]],
+    roles: list[str],
+    instance_profiles_for_roles: dict[str, list[str]],
 ) -> MagicMock:
     """Create a mock IAM client with specified resources."""
     mock_iam = MagicMock()
 
     # Mock list_roles paginator
     mock_paginator = MagicMock()
-    mock_paginator.paginate.return_value = [
-        {"Roles": [{"RoleName": role} for role in roles]}
-    ]
+    mock_paginator.paginate.return_value = [{"Roles": [{"RoleName": role} for role in roles]}]
     mock_iam.get_paginator = MagicMock(return_value=mock_paginator)
 
     return mock_iam
@@ -113,14 +104,12 @@ def create_mock_iam_client(
 @given(
     packer_keys=st.lists(packer_key_name, min_size=0, max_size=5, unique=True),
     non_packer_keys=st.lists(non_packer_key_name, min_size=0, max_size=3, unique=True),
-    in_use_indices=st.lists(
-        st.integers(min_value=0, max_value=10), min_size=0, max_size=3
-    ),
+    in_use_indices=st.lists(st.integers(min_value=0, max_value=10), min_size=0, max_size=3),
 )
 def test_orphaned_key_pair_identification(
-    packer_keys: List[str],
-    non_packer_keys: List[str],
-    in_use_indices: List[int],
+    packer_keys: list[str],
+    non_packer_keys: list[str],
+    in_use_indices: list[int],
 ):
     """
     Feature: packer-resource-reaper, Property 10: Orphaned Resource Identification
@@ -145,8 +134,7 @@ def test_orphaned_key_pair_identification(
 
     # Create running instances using some packer keys
     running_instances = [
-        {"KeyName": key_name, "State": {"Name": "running"}}
-        for key_name in in_use_packer_keys
+        {"KeyName": key_name, "State": {"Name": "running"}} for key_name in in_use_packer_keys
     ]
 
     # Create mock EC2 client
@@ -165,9 +153,9 @@ def test_orphaned_key_pair_identification(
     expected_orphaned = set(packer_keys) - in_use_packer_keys
 
     # Verify: only packer_* keys not in use should be identified as orphaned
-    assert (
-        set(orphaned_key_pairs) == expected_orphaned
-    ), f"Expected orphaned: {expected_orphaned}, got: {set(orphaned_key_pairs)}"
+    assert set(orphaned_key_pairs) == expected_orphaned, (
+        f"Expected orphaned: {expected_orphaned}, got: {set(orphaned_key_pairs)}"
+    )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -186,7 +174,7 @@ def test_orphaned_key_pair_identification(
     in_use_count=st.integers(min_value=0, max_value=3),
 )
 def test_orphaned_security_group_identification(
-    packer_sgs: List[Dict],
+    packer_sgs: list[dict],
     in_use_count: int,
 ):
     """
@@ -244,9 +232,9 @@ def test_orphaned_security_group_identification(
     expected_orphaned = all_sg_ids - in_use_sg_ids
 
     # Verify: only packer security groups not in use should be identified as orphaned
-    assert (
-        set(orphaned_sgs) == expected_orphaned
-    ), f"Expected orphaned: {expected_orphaned}, got: {set(orphaned_sgs)}"
+    assert set(orphaned_sgs) == expected_orphaned, (
+        f"Expected orphaned: {expected_orphaned}, got: {set(orphaned_sgs)}"
+    )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -274,9 +262,7 @@ def test_orphaned_key_pairs_subset_property(
     in_use_keys = set(packer_keys[:in_use_count])
 
     # Create running instances
-    running_instances = [
-        {"KeyName": key, "State": {"Name": "running"}} for key in in_use_keys
-    ]
+    running_instances = [{"KeyName": key, "State": {"Name": "running"}} for key in in_use_keys]
 
     # Create mock EC2 client
     mock_ec2 = create_mock_ec2_client(
@@ -291,20 +277,18 @@ def test_orphaned_key_pairs_subset_property(
     orphaned = orphan_manager.scan_orphaned_key_pairs()
 
     # Property 1: Orphaned keys should be a subset of all packer keys
-    assert set(orphaned).issubset(
-        set(packer_keys)
-    ), "Orphaned keys should be a subset of all packer keys"
+    assert set(orphaned).issubset(set(packer_keys)), (
+        "Orphaned keys should be a subset of all packer keys"
+    )
 
     # Property 2: No in-use key should be in orphaned set
-    assert set(orphaned).isdisjoint(
-        in_use_keys
-    ), "In-use keys should never be identified as orphaned"
+    assert set(orphaned).isdisjoint(in_use_keys), (
+        "In-use keys should never be identified as orphaned"
+    )
 
     # Property 3: All non-in-use packer keys should be orphaned
     expected_orphaned = set(packer_keys) - in_use_keys
-    assert (
-        set(orphaned) == expected_orphaned
-    ), f"Expected {expected_orphaned}, got {set(orphaned)}"
+    assert set(orphaned) == expected_orphaned, f"Expected {expected_orphaned}, got {set(orphaned)}"
 
 
 @settings(max_examples=100, deadline=10000)
@@ -338,14 +322,10 @@ def test_security_group_attachment_detection(
 
     # Determine which SGs are attached to instances
     instance_attached_count = min(instance_attached_count, sg_count)
-    instance_attached_sgs = {
-        sg["GroupId"] for sg in packer_sgs[:instance_attached_count]
-    }
+    instance_attached_sgs = {sg["GroupId"] for sg in packer_sgs[:instance_attached_count]}
 
     # Determine which SGs are attached to NICs (from remaining)
-    remaining_sgs = [
-        sg for sg in packer_sgs if sg["GroupId"] not in instance_attached_sgs
-    ]
+    remaining_sgs = [sg for sg in packer_sgs if sg["GroupId"] not in instance_attached_sgs]
     nic_attached_count = min(nic_attached_count, len(remaining_sgs))
     nic_attached_sgs = {sg["GroupId"] for sg in remaining_sgs[:nic_attached_count]}
 
@@ -360,9 +340,7 @@ def test_security_group_attachment_detection(
     ]
 
     # Create network interfaces
-    network_interfaces = [
-        {"Groups": [{"GroupId": sg_id}]} for sg_id in nic_attached_sgs
-    ]
+    network_interfaces = [{"Groups": [{"GroupId": sg_id}]} for sg_id in nic_attached_sgs]
 
     # Create mock EC2 client
     mock_ec2 = create_mock_ec2_client(
@@ -381,9 +359,9 @@ def test_security_group_attachment_detection(
     expected_orphaned = {sg["GroupId"] for sg in packer_sgs} - all_attached
 
     # Verify
-    assert (
-        set(orphaned) == expected_orphaned
-    ), f"Expected orphaned: {expected_orphaned}, got: {set(orphaned)}"
+    assert set(orphaned) == expected_orphaned, (
+        f"Expected orphaned: {expected_orphaned}, got: {set(orphaned)}"
+    )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -454,21 +432,19 @@ def test_empty_orphaned_resources_when_all_in_use(
 
     # Verify based on conditions
     if not has_packer_keys:
-        assert (
-            len(orphaned.orphaned_key_pairs) == 0
-        ), "No packer keys means no orphaned key pairs"
+        assert len(orphaned.orphaned_key_pairs) == 0, "No packer keys means no orphaned key pairs"
 
     if not has_packer_sgs:
-        assert (
-            len(orphaned.orphaned_security_groups) == 0
-        ), "No packer SGs means no orphaned security groups"
+        assert len(orphaned.orphaned_security_groups) == 0, (
+            "No packer SGs means no orphaned security groups"
+        )
 
     if all_in_use:
         if has_packer_keys:
-            assert (
-                len(orphaned.orphaned_key_pairs) == 0
-            ), "All keys in use means no orphaned key pairs"
+            assert len(orphaned.orphaned_key_pairs) == 0, (
+                "All keys in use means no orphaned key pairs"
+            )
         if has_packer_sgs:
-            assert (
-                len(orphaned.orphaned_security_groups) == 0
-            ), "All SGs in use means no orphaned security groups"
+            assert len(orphaned.orphaned_security_groups) == 0, (
+                "All SGs in use means no orphaned security groups"
+            )

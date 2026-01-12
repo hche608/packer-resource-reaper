@@ -20,8 +20,8 @@ Requirements Implemented:
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 
 from reaper.cleanup.engine import CleanupEngine
 from reaper.filters.identity import IdentityFilter
@@ -49,7 +49,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """
     Lambda entry point for Packer Resource Reaper.
 
@@ -89,9 +89,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     # Validate configuration inputs for security
     security_errors = validate_config_security(config)
     if security_errors:
-        logger.error(
-            f"Security validation errors: {LogSanitizer.sanitize(str(security_errors))}"
-        )
+        logger.error(f"Security validation errors: {LogSanitizer.sanitize(str(security_errors))}")
         return {"statusCode": 400, "body": {"errors": security_errors}}
 
     # Initialize AWS client manager using default Lambda credentials
@@ -121,7 +119,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     }
 
 
-def validate_config_security(config: ReaperConfig) -> List[str]:
+def validate_config_security(config: ReaperConfig) -> list[str]:
     """
     Validate configuration for security concerns.
 
@@ -151,7 +149,7 @@ def execute_reaper(
     config: ReaperConfig,
     client_manager: AWSClientManager,
     account_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Execute reaper for the current account.
 
@@ -184,9 +182,7 @@ def execute_reaper(
 
     # Apply two-criteria filtering (Requirement 1.3)
     # Instances must match BOTH key pair pattern AND age threshold
-    filtered_instances = apply_two_criteria_filter(
-        instances, temporal_filter, identity_filter
-    )
+    filtered_instances = apply_two_criteria_filter(instances, temporal_filter, identity_filter)
 
     logger.info(f"Found {len(filtered_instances)} instances matching cleanup criteria")
 
@@ -225,9 +221,7 @@ def execute_reaper(
         if config.dry_run:
             notifier.send_dry_run_report(resources, account_id, orphan_result)
         else:
-            notifier.send_cleanup_notification(
-                result, resources, account_id, orphan_result
-            )
+            notifier.send_cleanup_notification(result, resources, account_id, orphan_result)
 
     return {
         "dry_run": config.dry_run,
@@ -265,7 +259,7 @@ def _log_filtered_resources(resources: ResourceCollection) -> None:
         logger.info(f"Elastic IPs to process: {eip_ids}")
 
 
-def scan_instances(ec2: Any, account_id: str, region: str) -> List[PackerInstance]:
+def scan_instances(ec2: Any, account_id: str, region: str) -> list[PackerInstance]:
     """
     Scan EC2 instances in the account.
 
@@ -297,8 +291,7 @@ def scan_instances(ec2: Any, account_id: str, region: str) -> List[PackerInstanc
                             state=state,
                             vpc_id=instance.get("VpcId", ""),
                             security_groups=[
-                                sg["GroupId"]
-                                for sg in instance.get("SecurityGroups", [])
+                                sg["GroupId"] for sg in instance.get("SecurityGroups", [])
                             ],
                             key_name=instance.get("KeyName"),
                             launch_time=instance["LaunchTime"],
@@ -312,10 +305,10 @@ def scan_instances(ec2: Any, account_id: str, region: str) -> List[PackerInstanc
 
 
 def apply_two_criteria_filter(
-    instances: List[PackerInstance],
+    instances: list[PackerInstance],
     temporal_filter: TemporalFilter,
     identity_filter: IdentityFilter,
-) -> List[PackerInstance]:
+) -> list[PackerInstance]:
     """
     Apply two-criteria filtering to instances.
 
@@ -331,14 +324,10 @@ def apply_two_criteria_filter(
         List of instances matching both criteria
     """
     # Get instances matching age threshold
-    temporal_matches = set(
-        i.resource_id for i in temporal_filter.filter_instances(instances)
-    )
+    temporal_matches = set(i.resource_id for i in temporal_filter.filter_instances(instances))
 
     # Get instances matching key pair pattern
-    identity_matches = set(
-        i.resource_id for i in identity_filter.filter_instances(instances)
-    )
+    identity_matches = set(i.resource_id for i in identity_filter.filter_instances(instances))
 
     # Return instances matching BOTH criteria
     matching_ids = temporal_matches & identity_matches
@@ -354,7 +343,7 @@ def apply_two_criteria_filter(
 
 
 def build_resource_collection(
-    instances: List[PackerInstance],
+    instances: list[PackerInstance],
     ec2: Any,
     account_id: str,
     region: str,
@@ -396,9 +385,7 @@ def build_resource_collection(
         # Collect attached volumes
         try:
             response = ec2.describe_volumes(
-                Filters=[
-                    {"Name": "attachment.instance-id", "Values": [instance.resource_id]}
-                ]
+                Filters=[{"Name": "attachment.instance-id", "Values": [instance.resource_id]}]
             )
             for volume in response.get("Volumes", []):
                 collected_volume_ids.add(volume["VolumeId"])
@@ -420,22 +407,16 @@ def build_resource_collection(
     resources.security_groups = _fetch_security_groups(
         ec2, list(collected_sg_ids), account_id, region
     )
-    resources.key_pairs = _fetch_key_pairs(
-        ec2, list(collected_key_names), account_id, region
-    )
-    resources.volumes = _fetch_volumes(
-        ec2, list(collected_volume_ids), account_id, region
-    )
-    resources.elastic_ips = _fetch_elastic_ips(
-        ec2, list(collected_eip_ids), account_id, region
-    )
+    resources.key_pairs = _fetch_key_pairs(ec2, list(collected_key_names), account_id, region)
+    resources.volumes = _fetch_volumes(ec2, list(collected_volume_ids), account_id, region)
+    resources.elastic_ips = _fetch_elastic_ips(ec2, list(collected_eip_ids), account_id, region)
 
     return resources
 
 
 def _fetch_security_groups(
-    ec2: Any, sg_ids: List[str], account_id: str, region: str
-) -> List[PackerSecurityGroup]:
+    ec2: Any, sg_ids: list[str], account_id: str, region: str
+) -> list[PackerSecurityGroup]:
     """Fetch security group details."""
     if not sg_ids:
         return []
@@ -453,7 +434,7 @@ def _fetch_security_groups(
                 PackerSecurityGroup(
                     resource_id=sg["GroupId"],
                     resource_type=ResourceType.SECURITY_GROUP,
-                    creation_time=datetime.now(timezone.utc),
+                    creation_time=datetime.now(UTC),
                     tags=tags,
                     region=region,
                     account_id=account_id,
@@ -469,8 +450,8 @@ def _fetch_security_groups(
 
 
 def _fetch_key_pairs(
-    ec2: Any, key_names: List[str], account_id: str, region: str
-) -> List[PackerKeyPair]:
+    ec2: Any, key_names: list[str], account_id: str, region: str
+) -> list[PackerKeyPair]:
     """Fetch key pair details."""
     if not key_names:
         return []
@@ -480,7 +461,7 @@ def _fetch_key_pairs(
         response = ec2.describe_key_pairs(KeyNames=key_names)
         for kp in response.get("KeyPairs", []):
             tags = {t["Key"]: t["Value"] for t in kp.get("Tags", [])}
-            creation_time = kp.get("CreateTime", datetime.now(timezone.utc))
+            creation_time = kp.get("CreateTime", datetime.now(UTC))
             key_pairs.append(
                 PackerKeyPair(
                     resource_id=kp.get("KeyPairId", kp["KeyName"]),
@@ -500,8 +481,8 @@ def _fetch_key_pairs(
 
 
 def _fetch_volumes(
-    ec2: Any, volume_ids: List[str], account_id: str, region: str
-) -> List[PackerVolume]:
+    ec2: Any, volume_ids: list[str], account_id: str, region: str
+) -> list[PackerVolume]:
     """Fetch volume details."""
     if not volume_ids:
         return []
@@ -534,8 +515,8 @@ def _fetch_volumes(
 
 
 def _fetch_elastic_ips(
-    ec2: Any, allocation_ids: List[str], account_id: str, region: str
-) -> List[PackerElasticIP]:
+    ec2: Any, allocation_ids: list[str], account_id: str, region: str
+) -> list[PackerElasticIP]:
     """Fetch elastic IP details."""
     if not allocation_ids:
         return []
@@ -549,7 +530,7 @@ def _fetch_elastic_ips(
                 PackerElasticIP(
                     resource_id=address.get("AllocationId", address["PublicIp"]),
                     resource_type=ResourceType.ELASTIC_IP,
-                    creation_time=datetime.now(timezone.utc),
+                    creation_time=datetime.now(UTC),
                     tags=tags,
                     region=region,
                     account_id=account_id,

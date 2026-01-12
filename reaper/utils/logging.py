@@ -16,9 +16,9 @@ Requirements: 4.2, 6.3, 7.4, 11.1-11.5
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from reaper.utils.security import LogSanitizer
 
@@ -59,12 +59,12 @@ class LogEntry:
     resource_type: str
     resource_id: str
     message: str
-    details: Dict[str, Any] = field(default_factory=dict)
-    error_info: Optional[Dict[str, Any]] = None
+    details: dict[str, Any] = field(default_factory=dict)
+    error_info: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert log entry to dictionary for structured logging."""
-        entry = {
+        entry: dict[str, Any] = {
             "timestamp": self.timestamp.isoformat(),
             "level": self.level.value,
             "action": self.action.value,
@@ -109,7 +109,7 @@ class ReaperLogger:
         self.account_id = account_id
         self.region = region
         self.dry_run = dry_run
-        self._log_entries: List[LogEntry] = []
+        self._log_entries: list[LogEntry] = []
 
     def _create_entry(
         self,
@@ -118,8 +118,8 @@ class ReaperLogger:
         resource_type: str,
         resource_id: str,
         message: str,
-        details: Optional[Dict[str, Any]] = None,
-        error_info: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
+        error_info: dict[str, Any] | None = None,
     ) -> LogEntry:
         """Create a sanitized log entry."""
         # Sanitize all string values
@@ -129,7 +129,7 @@ class ReaperLogger:
         sanitized_error = LogSanitizer.sanitize_dict(error_info) if error_info else None
 
         return LogEntry(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             level=level,
             action=action,
             resource_type=resource_type,
@@ -207,7 +207,7 @@ class ReaperLogger:
         self,
         resource_type: str,
         resource_id: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         """Log individual resource scanned.
 
@@ -228,8 +228,8 @@ class ReaperLogger:
         self,
         api_name: str,
         service: str,
-        parameters: Optional[Dict[str, Any]] = None,
-        response_summary: Optional[str] = None,
+        parameters: dict[str, Any] | None = None,
+        response_summary: str | None = None,
     ) -> None:
         """Log AWS API call at DEBUG level.
 
@@ -241,7 +241,7 @@ class ReaperLogger:
             parameters: Optional parameters passed to the API (sanitized)
             response_summary: Optional summary of the response
         """
-        details = {
+        details: dict[str, Any] = {
             "api": api_name,
             "service": service,
         }
@@ -264,7 +264,7 @@ class ReaperLogger:
         self,
         step_name: str,
         resource_type: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         """Log processing step at DEBUG level.
 
@@ -289,7 +289,7 @@ class ReaperLogger:
         self,
         resource_type: str,
         resource_id: str,
-        attributes: Dict[str, Any],
+        attributes: dict[str, Any],
     ) -> None:
         """Log resource attributes at DEBUG level.
 
@@ -339,7 +339,7 @@ class ReaperLogger:
         resource_id: str,
         filter_name: str,
         matched: bool,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> None:
         """Log individual resource filter result."""
         entry = self._create_entry(
@@ -363,7 +363,7 @@ class ReaperLogger:
         action: ActionType,
         resource_type: str,
         resource_id: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         """Log start of cleanup action."""
         action_verb = self._get_action_verb(action)
@@ -382,7 +382,7 @@ class ReaperLogger:
         action: ActionType,
         resource_type: str,
         resource_id: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         """Log successful completion of cleanup action."""
         action_verb = self._get_action_verb(action)
@@ -401,7 +401,7 @@ class ReaperLogger:
         resource_type: str,
         resource_id: str,
         reason: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         """Log deferred cleanup action."""
         entry = self._create_entry(
@@ -419,7 +419,7 @@ class ReaperLogger:
         resource_type: str,
         resource_id: str,
         reason: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         """Log skipped cleanup action."""
         entry = self._create_entry(
@@ -439,8 +439,8 @@ class ReaperLogger:
         resource_type: str,
         resource_id: str,
         error: Exception,
-        action: Optional[ActionType] = None,
-        details: Optional[Dict[str, Any]] = None,
+        action: ActionType | None = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         """Log error with detailed information.
 
@@ -474,7 +474,7 @@ class ReaperLogger:
         self,
         resource_type: str,
         resource_id: str,
-        dependency_info: Optional[str] = None,
+        dependency_info: str | None = None,
     ) -> None:
         """Log DependencyViolation error specifically.
 
@@ -530,7 +530,7 @@ class ReaperLogger:
         logger.info("=" * 60)
         logger.info(f"Account: {self.account_id}")
         logger.info(f"Region: {self.region}")
-        logger.info(f"Timestamp: {datetime.now(timezone.utc).isoformat()}")
+        logger.info(f"Timestamp: {datetime.now(UTC).isoformat()}")
         logger.info("-" * 40)
 
     def log_execution_complete(
@@ -553,7 +553,7 @@ class ReaperLogger:
         logger.info("PACKER RESOURCE REAPER - EXECUTION COMPLETE")
         logger.info("=" * 60)
 
-    def get_log_entries(self) -> List[LogEntry]:
+    def get_log_entries(self) -> list[LogEntry]:
         """Get all log entries for reporting."""
         return self._log_entries.copy()
 
@@ -578,7 +578,7 @@ class ReaperLogger:
 def log_resource_scan(
     resource_type: str,
     resource_id: str,
-    details: Optional[Dict[str, Any]] = None,
+    details: dict[str, Any] | None = None,
 ) -> None:
     """Log resource scan at module level."""
     sanitized_id = LogSanitizer.sanitize(resource_id)
@@ -596,7 +596,7 @@ def log_cleanup_action(
     resource_type: str,
     resource_id: str,
     success: bool,
-    error: Optional[str] = None,
+    error: str | None = None,
 ) -> None:
     """Log cleanup action at module level."""
     sanitized_id = LogSanitizer.sanitize(resource_id)
@@ -618,7 +618,7 @@ def log_error_with_details(
     resource_type: str,
     resource_id: str,
     error: Exception,
-    context: Optional[Dict[str, Any]] = None,
+    context: dict[str, Any] | None = None,
 ) -> None:
     """Log error with detailed information at module level.
 
@@ -634,9 +634,7 @@ def log_error_with_details(
 
     error_type = type(error).__name__
 
-    message = (
-        f"[ERROR] {resource_type} {sanitized_id}: {error_type} - {sanitized_error}"
-    )
+    message = f"[ERROR] {resource_type} {sanitized_id}: {error_type} - {sanitized_error}"
 
     if sanitized_context:
         context_str = ", ".join(f"{k}={v}" for k, v in sanitized_context.items())
@@ -648,7 +646,7 @@ def log_error_with_details(
 def log_debug_api_call(
     api_name: str,
     service: str,
-    parameters: Optional[Dict[str, Any]] = None,
+    parameters: dict[str, Any] | None = None,
 ) -> None:
     """Log AWS API call at DEBUG level.
 
@@ -672,7 +670,7 @@ def log_debug_api_call(
 
 def log_debug_processing_step(
     step_name: str,
-    details: Optional[Dict[str, Any]] = None,
+    details: dict[str, Any] | None = None,
 ) -> None:
     """Log processing step at DEBUG level.
 
@@ -696,7 +694,7 @@ def log_debug_processing_step(
 def log_debug_resource_attributes(
     resource_type: str,
     resource_id: str,
-    attributes: Dict[str, Any],
+    attributes: dict[str, Any],
 ) -> None:
     """Log resource attributes at DEBUG level.
 

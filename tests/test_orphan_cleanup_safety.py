@@ -13,7 +13,6 @@ This module tests that the OrphanManager safely cleans up orphaned resources:
 - Include details in notifications (10.10)
 """
 
-from typing import List, Set
 from unittest.mock import MagicMock
 
 from hypothesis import given, settings
@@ -48,8 +47,8 @@ packer_role_name = st.builds(
 
 
 def create_mock_ec2_client_for_cleanup(
-    key_pairs_in_use: Set[str] = None,
-    sgs_in_use: Set[str] = None,
+    key_pairs_in_use: set[str] = None,
+    sgs_in_use: set[str] = None,
 ) -> MagicMock:
     """Create a mock EC2 client for cleanup operations."""
     mock_ec2 = MagicMock()
@@ -68,9 +67,7 @@ def create_mock_ec2_client_for_cleanup(
                 sg_id = f.get("Values", [None])[0]
                 if sg_id in sgs_in_use:
                     return {
-                        "Reservations": [
-                            {"Instances": [{"SecurityGroups": [{"GroupId": sg_id}]}]}
-                        ]
+                        "Reservations": [{"Instances": [{"SecurityGroups": [{"GroupId": sg_id}]}]}]
                     }
         return {"Reservations": []}
 
@@ -96,7 +93,7 @@ def create_mock_ec2_client_for_cleanup(
 
 
 def create_mock_iam_client_for_cleanup(
-    roles_in_use: Set[str] = None,
+    roles_in_use: set[str] = None,
 ) -> MagicMock:
     """Create a mock IAM client for cleanup operations."""
     mock_iam = MagicMock()
@@ -139,7 +136,7 @@ def create_mock_iam_client_for_cleanup(
 
 
 def create_mock_ec2_client_for_iam_check(
-    roles_in_use: Set[str] = None,
+    roles_in_use: set[str] = None,
 ) -> MagicMock:
     """Create a mock EC2 client that returns instances using specific IAM roles."""
     mock_ec2 = MagicMock()
@@ -190,8 +187,8 @@ def create_mock_ec2_client_for_iam_check(
     dry_run=st.booleans(),
 )
 def test_dry_run_prevents_destructive_operations(
-    orphaned_keys: List[str],
-    orphaned_sgs: List[str],
+    orphaned_keys: list[str],
+    orphaned_sgs: list[str],
     dry_run: bool,
 ):
     """
@@ -240,7 +237,7 @@ def test_dry_run_prevents_destructive_operations(
     keys_now_in_use_count=st.integers(min_value=0, max_value=3),
 )
 def test_key_pair_deletion_confirms_no_references(
-    orphaned_keys: List[str],
+    orphaned_keys: list[str],
     keys_now_in_use_count: int,
 ):
     """
@@ -271,12 +268,12 @@ def test_key_pair_deletion_confirms_no_references(
     expected_deleted = set(orphaned_keys) - keys_now_in_use
     expected_deferred = {f"key_pair:{k}" for k in keys_now_in_use}
 
-    assert (
-        set(result.deleted_key_pairs) == expected_deleted
-    ), f"Expected deleted: {expected_deleted}, got: {set(result.deleted_key_pairs)}"
-    assert (
-        set(result.deferred_resources) == expected_deferred
-    ), f"Expected deferred: {expected_deferred}, got: {set(result.deferred_resources)}"
+    assert set(result.deleted_key_pairs) == expected_deleted, (
+        f"Expected deleted: {expected_deleted}, got: {set(result.deleted_key_pairs)}"
+    )
+    assert set(result.deferred_resources) == expected_deferred, (
+        f"Expected deferred: {expected_deferred}, got: {set(result.deferred_resources)}"
+    )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -285,7 +282,7 @@ def test_key_pair_deletion_confirms_no_references(
     sgs_now_in_use_count=st.integers(min_value=0, max_value=3),
 )
 def test_security_group_deletion_confirms_no_dependencies(
-    orphaned_sgs: List[str],
+    orphaned_sgs: list[str],
     sgs_now_in_use_count: int,
 ):
     """
@@ -316,12 +313,12 @@ def test_security_group_deletion_confirms_no_dependencies(
     expected_deleted = set(orphaned_sgs) - sgs_now_in_use
     expected_deferred = {f"security_group:{sg}" for sg in sgs_now_in_use}
 
-    assert (
-        set(result.deleted_security_groups) == expected_deleted
-    ), f"Expected deleted: {expected_deleted}, got: {set(result.deleted_security_groups)}"
-    assert (
-        set(result.deferred_resources) == expected_deferred
-    ), f"Expected deferred: {expected_deferred}, got: {set(result.deferred_resources)}"
+    assert set(result.deleted_security_groups) == expected_deleted, (
+        f"Expected deleted: {expected_deleted}, got: {set(result.deleted_security_groups)}"
+    )
+    assert set(result.deferred_resources) == expected_deferred, (
+        f"Expected deferred: {expected_deferred}, got: {set(result.deferred_resources)}"
+    )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -330,7 +327,7 @@ def test_security_group_deletion_confirms_no_dependencies(
     roles_now_in_use_count=st.integers(min_value=0, max_value=2),
 )
 def test_iam_role_deletion_with_policy_detachment(
-    orphaned_roles: List[str],
+    orphaned_roles: list[str],
     roles_now_in_use_count: int,
 ):
     """
@@ -370,12 +367,12 @@ def test_iam_role_deletion_with_policy_detachment(
     expected_deleted = set(orphaned_roles) - roles_now_in_use
     expected_deferred = {f"iam_role:{r}" for r in roles_now_in_use}
 
-    assert (
-        set(result.deleted_iam_roles) == expected_deleted
-    ), f"Expected deleted: {expected_deleted}, got: {set(result.deleted_iam_roles)}"
-    assert (
-        set(result.deferred_resources) == expected_deferred
-    ), f"Expected deferred: {expected_deferred}, got: {set(result.deferred_resources)}"
+    assert set(result.deleted_iam_roles) == expected_deleted, (
+        f"Expected deleted: {expected_deleted}, got: {set(result.deleted_iam_roles)}"
+    )
+    assert set(result.deferred_resources) == expected_deferred, (
+        f"Expected deferred: {expected_deferred}, got: {set(result.deferred_resources)}"
+    )
 
     # Verify delete_role was called for non-in-use roles
     if expected_deleted:
@@ -429,9 +426,9 @@ def test_cleanup_result_totals_are_accurate(
 
     # Verify totals
     expected_total = key_count + sg_count + role_count
-    assert (
-        result.total_cleaned() == expected_total
-    ), f"Expected total: {expected_total}, got: {result.total_cleaned()}"
+    assert result.total_cleaned() == expected_total, (
+        f"Expected total: {expected_total}, got: {result.total_cleaned()}"
+    )
 
     assert len(result.deleted_key_pairs) == key_count
     assert len(result.deleted_security_groups) == sg_count
@@ -444,8 +441,8 @@ def test_cleanup_result_totals_are_accurate(
     orphaned_sgs=st.lists(packer_sg_id, min_size=0, max_size=3, unique=True),
 )
 def test_empty_orphaned_resources_produces_empty_result(
-    orphaned_keys: List[str],
-    orphaned_sgs: List[str],
+    orphaned_keys: list[str],
+    orphaned_sgs: list[str],
 ):
     """
     Feature: packer-resource-reaper, Property 11: Orphaned Resource Cleanup Safety
@@ -479,7 +476,7 @@ def test_empty_orphaned_resources_produces_empty_result(
     orphaned_keys=st.lists(packer_key_name, min_size=1, max_size=5, unique=True),
 )
 def test_cleanup_is_idempotent_in_dry_run(
-    orphaned_keys: List[str],
+    orphaned_keys: list[str],
 ):
     """
     Feature: packer-resource-reaper, Property 11: Orphaned Resource Cleanup Safety

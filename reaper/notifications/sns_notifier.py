@@ -12,8 +12,8 @@ comprehensive reports with all required fields including orphaned resources.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from reaper.models import CleanupResult, PackerInstance, ResourceCollection
 from reaper.utils.security import LogSanitizer
@@ -22,9 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 # Default termination reason for Packer instances
-DEFAULT_TERMINATION_REASON = (
-    "Matches Packer key pair pattern (packer_*) and exceeds age threshold"
-)
+DEFAULT_TERMINATION_REASON = "Matches Packer key pair pattern (packer_*) and exceeds age threshold"
 
 
 class SNSNotifier:
@@ -60,7 +58,7 @@ class SNSNotifier:
         result: CleanupResult,
         resources: ResourceCollection,
         account_id: str,
-        orphan_result: Optional[Any] = None,
+        orphan_result: Any | None = None,
     ) -> bool:
         """
         Send notification about cleanup operations.
@@ -98,7 +96,7 @@ class SNSNotifier:
         self,
         resources: ResourceCollection,
         account_id: str,
-        orphan_result: Optional[Any] = None,
+        orphan_result: Any | None = None,
     ) -> bool:
         """
         Send dry-run simulation report.
@@ -140,9 +138,7 @@ class SNSNotifier:
         errors = len(result.errors)
 
         if errors > 0:
-            return (
-                f"Packer Resource Reaper - Cleaned {total} resources ({errors} errors)"
-            )
+            return f"Packer Resource Reaper - Cleaned {total} resources ({errors} errors)"
         return f"Packer Resource Reaper - Cleaned {total} resources"
 
     def _build_message(
@@ -150,7 +146,7 @@ class SNSNotifier:
         result: CleanupResult,
         resources: ResourceCollection,
         account_id: str,
-        orphan_result: Optional[Any] = None,
+        orphan_result: Any | None = None,
     ) -> str:
         """Build detailed notification message.
 
@@ -162,7 +158,7 @@ class SNSNotifier:
             "PACKER RESOURCE REAPER - CLEANUP REPORT",
             "=" * 60,
             "",
-            f"Timestamp: {datetime.now(timezone.utc).isoformat()}",
+            f"Timestamp: {datetime.now(UTC).isoformat()}",
             f"Account: {account_id}",
             f"Region: {self.region}",
             f"Mode: {'DRY RUN' if result.dry_run else 'LIVE'}",
@@ -192,7 +188,7 @@ class SNSNotifier:
             )
 
             # Build a lookup map for instance details
-            instance_map: Dict[str, PackerInstance] = {
+            instance_map: dict[str, PackerInstance] = {
                 inst.resource_id: inst for inst in resources.instances
             }
 
@@ -216,13 +212,9 @@ class SNSNotifier:
                 lines.append("")
 
         # Deleted resources (Requirement 4.3 - list of deleted associated resources)
-        self._add_resource_section(
-            lines, "DELETED SECURITY GROUPS", result.deleted_security_groups
-        )
+        self._add_resource_section(lines, "DELETED SECURITY GROUPS", result.deleted_security_groups)
         self._add_resource_section(lines, "DELETED KEY PAIRS", result.deleted_key_pairs)
-        self._add_resource_section(
-            lines, "RELEASED ELASTIC IPS", result.released_elastic_ips
-        )
+        self._add_resource_section(lines, "RELEASED ELASTIC IPS", result.released_elastic_ips)
         self._add_resource_section(lines, "DELETED VOLUMES", result.deleted_volumes)
         self._add_resource_section(lines, "DELETED SNAPSHOTS", result.deleted_snapshots)
 
@@ -258,9 +250,7 @@ class SNSNotifier:
 
         return "\n".join(lines)
 
-    def _add_orphaned_resources_section(
-        self, lines: List[str], orphan_result: Any
-    ) -> None:
+    def _add_orphaned_resources_section(self, lines: list[str], orphan_result: Any) -> None:
         """Add orphaned resources section to the message.
 
         This implements Requirement 10.10: include orphaned resource details
@@ -309,7 +299,7 @@ class SNSNotifier:
         self,
         resources: ResourceCollection,
         account_id: str,
-        orphan_result: Optional[Any] = None,
+        orphan_result: Any | None = None,
     ) -> str:
         """Build dry-run simulation report message.
 
@@ -322,7 +312,7 @@ class SNSNotifier:
             "PACKER RESOURCE REAPER - DRY RUN SIMULATION",
             "=" * 60,
             "",
-            f"Timestamp: {datetime.now(timezone.utc).isoformat()}",
+            f"Timestamp: {datetime.now(UTC).isoformat()}",
             f"Account: {account_id}",
             f"Region: {self.region}",
             "",
@@ -406,18 +396,14 @@ class SNSNotifier:
 
         if orphan_result:
             orphan_total = orphan_result.total_cleaned()
-            lines.append(
-                f"Total Phase 2 orphaned resources that would be cleaned: {orphan_total}"
-            )
+            lines.append(f"Total Phase 2 orphaned resources that would be cleaned: {orphan_total}")
             lines.append(f"Grand total: {resources.total_count() + orphan_total}")
 
         lines.append("=" * 60)
 
         return "\n".join(lines)
 
-    def _add_orphaned_dry_run_section(
-        self, lines: List[str], orphan_result: Any
-    ) -> None:
+    def _add_orphaned_dry_run_section(self, lines: list[str], orphan_result: Any) -> None:
         """Add orphaned resources section to dry-run message.
 
         This implements Requirement 10.10: include orphaned resource details
@@ -465,9 +451,7 @@ class SNSNotifier:
                 logger.info(f"[DRY RUN] Would delete orphaned IAM role: {role}")
             lines.append("")
 
-    def _add_resource_section(
-        self, lines: List[str], title: str, resources: List[str]
-    ) -> None:
+    def _add_resource_section(self, lines: list[str], title: str, resources: list[str]) -> None:
         """Add a resource section to the message."""
         if resources:
             lines.extend([title, "-" * 40])

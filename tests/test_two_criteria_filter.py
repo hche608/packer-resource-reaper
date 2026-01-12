@@ -8,8 +8,7 @@ This test validates that only instances matching BOTH criteria are selected:
 2. Instance age exceeds MaxInstanceAge threshold (Temporal Filter)
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import List
+from datetime import UTC, datetime, timedelta
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -43,10 +42,10 @@ def create_instance(
 
 
 def apply_two_criteria_filter(
-    instances: List[PackerInstance],
+    instances: list[PackerInstance],
     temporal_filter: TemporalFilter,
     identity_filter: IdentityFilter,
-) -> List[PackerInstance]:
+) -> list[PackerInstance]:
     """
     Apply the two-criteria filter: temporal AND identity.
 
@@ -97,7 +96,7 @@ def test_two_criteria_both_match_selects_instance(
 
     Validates: Requirements 1.1, 1.2
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Create instance that is old enough
     actual_age = max(instance_age_hours, max_age_hours)  # Ensure it's old enough
@@ -142,7 +141,7 @@ def test_two_criteria_wrong_key_excludes_instance(
 
     Validates: Requirements 1.2
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Create instance that is old enough to pass temporal filter
     actual_age = max_age_hours + 10
@@ -181,7 +180,7 @@ def test_two_criteria_young_instance_excluded(
 
     Validates: Requirements 1.1
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Create instance that is too young (below threshold)
     young_age = max(1, max_age_hours - 1)  # At least 1 hour but below threshold
@@ -231,7 +230,7 @@ def test_two_criteria_both_must_match(
 
     Validates: Requirements 1.1, 1.2
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     launch_time = now - timedelta(hours=instance_age_hours)
 
     key_name = f"packer_{packer_suffix}" if has_packer_key else non_packer_key
@@ -282,7 +281,7 @@ def test_two_criteria_preserves_matching_subset(
 
     Validates: Requirements 1.1, 1.2
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     instances = []
     expected_matches = []
 
@@ -337,7 +336,7 @@ def test_two_criteria_no_key_excludes_instance(
 
     Validates: Requirements 1.2
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Create old instance without key pair
     launch_time = now - timedelta(hours=max_age_hours + 10)

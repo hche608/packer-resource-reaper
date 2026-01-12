@@ -7,7 +7,7 @@ The identity filter identifies Packer resources by key pair pattern (packer_*).
 This is the primary identification mechanism per the requirements.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -30,7 +30,7 @@ def create_instance(
     instance_id: str = "i-test123",
 ) -> PackerInstance:
     """Helper to create a PackerInstance for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerInstance(
         resource_id=instance_id,
         resource_type=ResourceType.INSTANCE,
@@ -53,7 +53,7 @@ def create_security_group(
     group_id: str = "sg-test123",
 ) -> PackerSecurityGroup:
     """Helper to create a PackerSecurityGroup for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerSecurityGroup(
         resource_id=group_id,
         resource_type=ResourceType.SECURITY_GROUP,
@@ -72,7 +72,7 @@ def create_key_pair(
     key_id: str = "key-test123",
 ) -> PackerKeyPair:
     """Helper to create a PackerKeyPair for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerKeyPair(
         resource_id=key_id,
         resource_type=ResourceType.KEY_PAIR,
@@ -90,7 +90,7 @@ def create_volume(
     volume_id: str = "vol-test123",
 ) -> PackerVolume:
     """Helper to create a PackerVolume for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerVolume(
         resource_id=volume_id,
         resource_type=ResourceType.VOLUME,
@@ -110,7 +110,7 @@ def create_snapshot(
     snapshot_id: str = "snap-test123",
 ) -> PackerSnapshot:
     """Helper to create a PackerSnapshot for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerSnapshot(
         resource_id=snapshot_id,
         resource_type=ResourceType.SNAPSHOT,
@@ -130,7 +130,7 @@ def create_elastic_ip(
     allocation_id: str = "eipalloc-test123",
 ) -> PackerElasticIP:
     """Helper to create a PackerElasticIP for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerElasticIP(
         resource_id=allocation_id,
         resource_type=ResourceType.ELASTIC_IP,
@@ -170,9 +170,7 @@ def test_packer_pattern_matches_instances_with_key_name(suffix: str):
     identity_filter = IdentityFilter()
     result = identity_filter.filter_instances([instance])
 
-    assert (
-        len(result) == 1
-    ), f"Instance with key_name '{key_name}' should match packer_* pattern"
+    assert len(result) == 1, f"Instance with key_name '{key_name}' should match packer_* pattern"
     assert result[0].resource_id == instance.resource_id
 
 
@@ -193,9 +191,7 @@ def test_packer_pattern_matches_security_groups(suffix: str):
     identity_filter = IdentityFilter()
     result = identity_filter.filter_security_groups([sg])
 
-    assert (
-        len(result) == 1
-    ), f"Security group '{group_name}' should match packer_* pattern"
+    assert len(result) == 1, f"Security group '{group_name}' should match packer_* pattern"
     assert result[0].resource_id == sg.resource_id
 
 
@@ -244,9 +240,9 @@ def test_non_matching_key_names_excluded(key_name: str):
     identity_filter = IdentityFilter()
     result = identity_filter.filter_instances([instance])
 
-    assert (
-        len(result) == 0
-    ), f"Instance with non-matching key_name '{key_name}' should not be filtered"
+    assert len(result) == 0, (
+        f"Instance with non-matching key_name '{key_name}' should not be filtered"
+    )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -280,9 +276,7 @@ def test_filter_preserves_all_matching_instances(suffix: str):
     Validates: Requirements 1.2, 1.3
     """
     # Create matching and non-matching instances
-    matching_instance = create_instance(
-        key_name=f"packer_{suffix}", instance_id="i-matching"
-    )
+    matching_instance = create_instance(key_name=f"packer_{suffix}", instance_id="i-matching")
     non_matching_instance = create_instance(
         key_name=f"production_{suffix}", instance_id="i-nonmatching"
     )
@@ -317,9 +311,9 @@ def test_custom_key_pattern(suffix: str):
     identity_filter = IdentityFilter(key_pattern=custom_prefix)
     result = identity_filter.filter_instances([instance])
 
-    assert (
-        len(result) == 1
-    ), f"Instance with key_name '{key_name}' should match pattern '{custom_prefix}'"
+    assert len(result) == 1, (
+        f"Instance with key_name '{key_name}' should match pattern '{custom_prefix}'"
+    )
 
 
 def test_default_pattern_is_packer_prefix():
@@ -452,9 +446,7 @@ def test_security_group_filter_handles_empty_group_name():
     identity_filter = IdentityFilter()
     result = identity_filter.filter_security_groups([sg_empty])
 
-    assert (
-        len(result) == 0
-    ), "CRITICAL SAFETY FAILURE: Security group with empty name was returned!"
+    assert len(result) == 0, "CRITICAL SAFETY FAILURE: Security group with empty name was returned!"
 
 
 def test_security_group_filter_handles_missing_group_name_attribute():
@@ -479,9 +471,9 @@ def test_security_group_filter_handles_missing_group_name_attribute():
     # This should not crash and should return empty list
     result = identity_filter.filter_security_groups([fake_sg])
 
-    assert (
-        len(result) == 0
-    ), "CRITICAL SAFETY FAILURE: Security group without group_name attribute was returned!"
+    assert len(result) == 0, (
+        "CRITICAL SAFETY FAILURE: Security group without group_name attribute was returned!"
+    )
 
 
 def test_security_group_filter_case_sensitive():
@@ -515,8 +507,7 @@ def test_security_group_filter_does_not_pass_through_all():
     """
     # Create 100 non-packer security groups
     non_packer_groups = [
-        create_security_group(group_name=f"prod-sg-{i}", group_id=f"sg-{i}")
-        for i in range(100)
+        create_security_group(group_name=f"prod-sg-{i}", group_id=f"sg-{i}") for i in range(100)
     ]
 
     identity_filter = IdentityFilter()
@@ -526,9 +517,9 @@ def test_security_group_filter_does_not_pass_through_all():
         f"CRITICAL SAFETY FAILURE: Filter returned {len(result)} of {len(non_packer_groups)} "
         "non-packer security groups! This indicates a pass-through bug."
     )
-    assert len(result) != len(
-        non_packer_groups
-    ), "CRITICAL SAFETY FAILURE: Filter appears to be a pass-through!"
+    assert len(result) != len(non_packer_groups), (
+        "CRITICAL SAFETY FAILURE: Filter appears to be a pass-through!"
+    )
 
 
 def test_mixed_security_groups_filter_detailed():
@@ -544,9 +535,7 @@ def test_mixed_security_groups_filter_detailed():
         # Packer groups - SHOULD be returned
         create_security_group(group_name="packer_abc123", group_id="sg-packer1"),
         create_security_group(group_name="packer_build_temp", group_id="sg-packer2"),
-        create_security_group(
-            group_name="packer_", group_id="sg-packer3"
-        ),  # Edge: just prefix
+        create_security_group(group_name="packer_", group_id="sg-packer3"),  # Edge: just prefix
         # Production groups - MUST NOT be returned
         create_security_group(group_name="production-web-tier", group_id="sg-prod1"),
         create_security_group(group_name="production-api", group_id="sg-prod2"),
@@ -560,18 +549,10 @@ def test_mixed_security_groups_filter_detailed():
         create_security_group(group_name="vpn-endpoint", group_id="sg-vpn"),
         create_security_group(group_name="load-balancer-sg", group_id="sg-alb"),
         # Tricky names that look similar but aren't packer_ - MUST NOT be returned
-        create_security_group(
-            group_name="packer", group_id="sg-tricky1"
-        ),  # No underscore
-        create_security_group(
-            group_name="packers_team", group_id="sg-tricky2"
-        ),  # Wrong prefix
-        create_security_group(
-            group_name="my-packer_sg", group_id="sg-tricky3"
-        ),  # Prefix in middle
-        create_security_group(
-            group_name="Packer_uppercase", group_id="sg-tricky4"
-        ),  # Wrong case
+        create_security_group(group_name="packer", group_id="sg-tricky1"),  # No underscore
+        create_security_group(group_name="packers_team", group_id="sg-tricky2"),  # Wrong prefix
+        create_security_group(group_name="my-packer_sg", group_id="sg-tricky3"),  # Prefix in middle
+        create_security_group(group_name="Packer_uppercase", group_id="sg-tricky4"),  # Wrong case
     ]
 
     identity_filter = IdentityFilter()
@@ -587,9 +568,7 @@ def test_mixed_security_groups_filter_detailed():
     result_ids = {sg.resource_id for sg in result}
     expected_ids = {"sg-packer1", "sg-packer2", "sg-packer3"}
     assert result_ids == expected_ids, (
-        f"Wrong security groups returned!\n"
-        f"Expected: {expected_ids}\n"
-        f"Got: {result_ids}"
+        f"Wrong security groups returned!\nExpected: {expected_ids}\nGot: {result_ids}"
     )
 
     # Verify NO production groups leaked through

@@ -3,7 +3,7 @@
 # Common development tasks for the AWS Packer Resource Reaper project.
 
 .PHONY: help install install-dev clean deep-clean lint format type-check test test-cov test-watch \
-        build invoke deploy deploy-dev deploy-prod validate logs
+        build invoke deploy deploy-dev deploy-prod validate logs pre-commit
 
 # Default target
 help:
@@ -17,8 +17,8 @@ help:
 	@echo "  make deep-clean     Remove everything including .venv"
 	@echo ""
 	@echo "Code Quality:"
-	@echo "  make lint           Run linters (flake8)"
-	@echo "  make format         Format code (black + isort)"
+	@echo "  make lint           Run linter (ruff check)"
+	@echo "  make format         Format code (ruff format)"
 	@echo "  make type-check     Run type checking (mypy)"
 	@echo "  make check          Run all code quality checks"
 	@echo ""
@@ -30,7 +30,6 @@ help:
 	@echo "SAM (Local Development):"
 	@echo "  make build          Build SAM application"
 	@echo "  make invoke         Invoke Lambda locally (dry-run)"
-	@echo "  make invoke-debug   Invoke Lambda locally with DEBUG logging"
 	@echo "  make validate       Validate SAM template"
 	@echo ""
 	@echo "Deployment:"
@@ -44,11 +43,10 @@ help:
 # =============================================================================
 
 install:
-	uv pip compile pyproject.toml -o requirements.txt
-	uv pip install -r requirements.txt
+	uv sync --no-dev
 
 install-dev:
-	uv pip install -e ".[dev]"
+	uv sync
 
 clean:
 	rm -rf .pytest_cache
@@ -70,22 +68,26 @@ deep-clean: clean
 # =============================================================================
 
 lint:
-	uv run flake8 reaper --max-line-length=100 --ignore=E501,W503,E203
-	uv run flake8 tests --max-line-length=100 --ignore=E501,W503,E203
+	uv run ruff check .
 
 format:
-	uv run isort reaper tests
-	uv run black reaper tests
+	uv run ruff format .
 
 format-check:
-	uv run isort --check-only reaper tests
-	uv run black --check reaper tests
+	uv run ruff format --check .
 
 type-check:
-	uv run mypy reaper --ignore-missing-imports
+	uv run mypy reaper
 
 check: lint format-check type-check
 	@echo "All code quality checks passed!"
+
+pre-commit:
+	@if command -v prek >/dev/null 2>&1; then \
+		prek run --all-files; \
+	else \
+		uv run pre-commit run --all-files; \
+	fi
 
 # =============================================================================
 # Testing
@@ -108,7 +110,7 @@ test-safety:
 # =============================================================================
 
 build:
-	uv pip compile pyproject.toml -o requirements.txt
+	uv export --format requirements-txt --no-hashes --no-editable --output-file requirements.txt
 	sam build
 
 invoke: build

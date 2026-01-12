@@ -14,7 +14,7 @@ Key configuration options:
 import logging
 import os
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Optional
 
 # Valid log levels as per Requirement 11.1
 VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
@@ -26,7 +26,7 @@ _config_logger = logging.getLogger(__name__)
 class ConfigurationError(Exception):
     """Exception raised for configuration validation errors."""
 
-    def __init__(self, message: str, errors: Optional[List[str]] = None):
+    def __init__(self, message: str, errors: list[str] | None = None):
         self.message = message
         self.errors = errors or []
         super().__init__(self.message)
@@ -84,10 +84,10 @@ class ReaperConfig:
             try:
                 parsed_age = int(max_age)
                 config.max_instance_age_hours = parsed_age
-            except ValueError:
+            except ValueError as e:
                 raise ConfigurationError(
                     f"Invalid MAX_INSTANCE_AGE_HOURS: '{max_age}' is not a valid integer"
-                )
+                ) from e
 
         # Parse dry run mode - explicit handling (Requirement 9.5)
         # Only "true" or "false" (case-insensitive) are valid
@@ -104,6 +104,7 @@ class ReaperConfig:
         config.region = os.environ.get("AWS_REGION", "")
         if not config.region:
             import boto3
+
             config.region = boto3.Session().region_name or ""
 
         # Parse key pair pattern (default: "packer_") (Requirement 1.2)
@@ -115,9 +116,7 @@ class ReaperConfig:
             config.log_level = log_level_value
         else:
             # Default to INFO with warning when invalid LOG_LEVEL is provided (Requirement 11.5)
-            _config_logger.warning(
-                f"Invalid LOG_LEVEL '{log_level_value}', defaulting to INFO"
-            )
+            _config_logger.warning(f"Invalid LOG_LEVEL '{log_level_value}', defaulting to INFO")
             config.log_level = "INFO"
 
         # Parse BATCH_DELETE_SIZE (Requirements 12.1, 12.2, 12.7)
@@ -149,7 +148,7 @@ class ReaperConfig:
 
         return config
 
-    def validate(self) -> List[str]:
+    def validate(self) -> list[str]:
         """Validate configuration and return list of errors.
 
         This implements Requirement 5.2: validate MaxInstanceAge is positive integer.
@@ -161,9 +160,7 @@ class ReaperConfig:
 
         # MaxInstanceAge must be a positive integer (Requirement 5.2)
         if self.max_instance_age_hours < 1:
-            errors.append(
-                "MAX_INSTANCE_AGE_HOURS must be a positive integer (at least 1)"
-            )
+            errors.append("MAX_INSTANCE_AGE_HOURS must be a positive integer (at least 1)")
 
         if self.max_instance_age_hours > 168:  # 1 week
             errors.append("MAX_INSTANCE_AGE_HOURS should not exceed 168 (1 week)")

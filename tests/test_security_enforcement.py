@@ -4,8 +4,6 @@ Feature: packer-resource-reaper, Property 8: Security and Scope Enforcement
 Validates: Requirements 7.2, 7.4, 8.1-8.6
 """
 
-from typing import Dict
-
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
@@ -99,7 +97,7 @@ def test_valid_region_passes_validation(region: str):
 
 @settings(max_examples=100, deadline=5000)
 @given(tags=valid_tags_strategy)
-def test_valid_tags_pass_validation(tags: Dict[str, str]):
+def test_valid_tags_pass_validation(tags: dict[str, str]):
     """
     Feature: packer-resource-reaper, Property 9: Security and Scope Enforcement
 
@@ -135,9 +133,7 @@ def test_scope_enforcer_region_restriction(region: str, allowed_regions: list):
     if region in allowed_regions:
         assert in_scope, f"Region {region} should be in scope when in allowed list"
     else:
-        assert (
-            not in_scope
-        ), f"Region {region} should not be in scope when not in allowed list"
+        assert not in_scope, f"Region {region} should not be in scope when not in allowed list"
 
 
 @settings(max_examples=100, deadline=5000)
@@ -161,9 +157,7 @@ def test_scope_enforcer_account_restriction(account_id: str, allowed_accounts: l
     if account_id in allowed_accounts:
         assert in_scope, f"Account {account_id} should be in scope when in allowed list"
     else:
-        assert (
-            not in_scope
-        ), f"Account {account_id} should not be in scope when not in allowed list"
+        assert not in_scope, f"Account {account_id} should not be in scope when not in allowed list"
 
 
 @settings(max_examples=100, deadline=5000)
@@ -198,7 +192,7 @@ def test_log_sanitizer_removes_access_keys(message: str):
         max_size=5,
     ),
 )
-def test_log_sanitizer_dict_redacts_sensitive_keys(data: Dict[str, str]):
+def test_log_sanitizer_dict_redacts_sensitive_keys(data: dict[str, str]):
     """
     Feature: packer-resource-reaper, Property 9: Security and Scope Enforcement
 
@@ -212,9 +206,7 @@ def test_log_sanitizer_dict_redacts_sensitive_keys(data: Dict[str, str]):
 
     sanitized = LogSanitizer.sanitize_dict(data_with_secret)
 
-    assert (
-        sanitized.get("password") == "[REDACTED]"
-    ), "Password value should be redacted"
+    assert sanitized.get("password") == "[REDACTED]", "Password value should be redacted"
 
 
 @settings(max_examples=100, deadline=5000)
@@ -331,9 +323,9 @@ def test_input_validator_rejects_oversized_inputs(long_string: str):
     result = InputValidator.validate_resource_id(long_string, "instance_id")
 
     assert not result.is_valid, "Oversized input should be rejected"
-    assert any(
-        "length" in e.lower() for e in result.errors
-    ), "Error should mention length violation"
+    assert any("length" in e.lower() for e in result.errors), (
+        "Error should mention length violation"
+    )
 
 
 # =============================================================================
@@ -372,9 +364,7 @@ def test_filter_scope_enforcer_only_allows_registered_instances(
 
     # Unregistered instance should NOT be in scope
     in_scope, reason = enforcer.is_instance_in_scope(extra_instance_id)
-    assert (
-        not in_scope
-    ), f"Unregistered instance {extra_instance_id} should not be in scope"
+    assert not in_scope, f"Unregistered instance {extra_instance_id} should not be in scope"
 
 
 @settings(max_examples=100, deadline=5000)
@@ -438,9 +428,7 @@ def test_filter_scope_enforcer_only_allows_registered_security_groups(
 
     # Unregistered security group should NOT be in scope
     in_scope, reason = enforcer.is_security_group_in_scope(extra_sg_id)
-    assert (
-        not in_scope
-    ), f"Unregistered security group {extra_sg_id} should not be in scope"
+    assert not in_scope, f"Unregistered security group {extra_sg_id} should not be in scope"
 
 
 @settings(max_examples=100, deadline=5000)
@@ -507,8 +495,7 @@ def test_key_pair_pattern_validation_accepts_valid_packer_keys(key_name: str):
 @settings(max_examples=100, deadline=5000)
 @given(
     key_name=st.text(min_size=1, max_size=30).filter(
-        lambda x: not x.startswith("packer_")
-        and not any(c in x for c in DANGEROUS_CHARACTERS)
+        lambda x: not x.startswith("packer_") and not any(c in x for c in DANGEROUS_CHARACTERS)
     ),
 )
 def test_key_pair_pattern_validation_rejects_non_packer_keys(key_name: str):
@@ -565,8 +552,7 @@ def test_instance_cleanup_validation_accepts_matching_instances(
 @given(
     instance_id=valid_instance_id_strategy,
     key_name=st.text(min_size=1, max_size=20).filter(
-        lambda x: not x.startswith("packer_")
-        and not any(c in x for c in DANGEROUS_CHARACTERS)
+        lambda x: not x.startswith("packer_") and not any(c in x for c in DANGEROUS_CHARACTERS)
     ),
     age_hours=st.floats(min_value=3.0, max_value=168.0),
     max_age_hours=st.integers(min_value=1, max_value=2),
@@ -666,18 +652,14 @@ def test_single_region_boundary_enforcement(
         region=current_region,
         account_id=account_id,
     )
-    assert (
-        in_scope
-    ), f"Resource in configured region {current_region} should be in scope"
+    assert in_scope, f"Resource in configured region {current_region} should be in scope"
 
     # Resource in other region should NOT be in scope
     in_scope, reasons = enforcer.is_resource_in_scope(
         region=other_region,
         account_id=account_id,
     )
-    assert (
-        not in_scope
-    ), f"Resource in other region {other_region} should not be in scope"
+    assert not in_scope, f"Resource in other region {other_region} should not be in scope"
 
 
 @settings(max_examples=100, deadline=5000)
@@ -712,18 +694,14 @@ def test_single_account_boundary_enforcement(
         region=region,
         account_id=current_account,
     )
-    assert (
-        in_scope
-    ), f"Resource in configured account {current_account} should be in scope"
+    assert in_scope, f"Resource in configured account {current_account} should be in scope"
 
     # Resource in other account should NOT be in scope
     in_scope, reasons = enforcer.is_resource_in_scope(
         region=region,
         account_id=other_account,
     )
-    assert (
-        not in_scope
-    ), f"Resource in other account {other_account} should not be in scope"
+    assert not in_scope, f"Resource in other account {other_account} should not be in scope"
 
 
 @settings(max_examples=100, deadline=5000)
@@ -744,9 +722,7 @@ def test_log_sanitizer_never_exposes_password_patterns(message: str):
 
     sanitized = LogSanitizer.sanitize(message_with_password)
 
-    assert (
-        "SuperSecret123!" not in sanitized
-    ), "Password value should be redacted from log message"
+    assert "SuperSecret123!" not in sanitized, "Password value should be redacted from log message"
 
 
 @settings(max_examples=100, deadline=5000)
@@ -767,9 +743,9 @@ def test_log_sanitizer_never_exposes_token_patterns(message: str):
 
     sanitized = LogSanitizer.sanitize(message_with_token)
 
-    assert (
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in sanitized
-    ), "Token value should be redacted from log message"
+    assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in sanitized, (
+        "Token value should be redacted from log message"
+    )
 
 
 @settings(max_examples=100, deadline=5000)

@@ -7,7 +7,7 @@ from failed Packer builds as per Requirements 2.2, 2.4, 2.8, 7.1, 7.2.
 """
 
 import logging
-from typing import Any, List, Optional
+from typing import Any
 
 from botocore.exceptions import ClientError
 
@@ -41,8 +41,8 @@ class IAMManager:
         self.dry_run = dry_run
 
     def scan_instance_profiles(
-        self, account_id: str, region: str, pattern: Optional[str] = None
-    ) -> List[PackerInstanceProfile]:
+        self, account_id: str, region: str, pattern: str | None = None
+    ) -> list[PackerInstanceProfile]:
         """
         Scan IAM instance profiles matching the packer pattern.
 
@@ -92,14 +92,12 @@ class IAMManager:
         except Exception as e:
             logger.error(f"Error scanning instance profiles: {e}")
 
-        logger.info(
-            f"Scanned {len(instance_profiles)} instance profiles matching '{pattern}'"
-        )
+        logger.info(f"Scanned {len(instance_profiles)} instance profiles matching '{pattern}'")
         return instance_profiles
 
     def get_instance_profile_by_name(
         self, profile_name: str, account_id: str, region: str
-    ) -> Optional[PackerInstanceProfile]:
+    ) -> PackerInstanceProfile | None:
         """
         Get an instance profile by its name.
 
@@ -146,8 +144,8 @@ class IAMManager:
         return None
 
     def delete_instance_profiles(
-        self, instance_profiles: List[PackerInstanceProfile]
-    ) -> tuple[List[str], List[str], dict]:
+        self, instance_profiles: list[PackerInstanceProfile]
+    ) -> tuple[list[str], list[str], dict[str, str]]:
         """
         Delete IAM instance profiles with role detachment.
 
@@ -173,8 +171,7 @@ class IAMManager:
                     deferred.append(profile.instance_profile_name)
             except Exception as e:
                 logger.error(
-                    f"Error deleting instance profile "
-                    f"{profile.instance_profile_name}: {e}"
+                    f"Error deleting instance profile {profile.instance_profile_name}: {e}"
                 )
                 errors[profile.instance_profile_name] = str(e)
 
@@ -202,9 +199,7 @@ class IAMManager:
         try:
             # Step 1: Remove all roles from the instance profile
             for role_name in profile.roles:
-                logger.info(
-                    f"Removing role {role_name} from instance profile {profile_name}"
-                )
+                logger.info(f"Removing role {role_name} from instance profile {profile_name}")
                 self.iam.remove_role_from_instance_profile(
                     InstanceProfileName=profile_name,
                     RoleName=role_name,
@@ -218,9 +213,7 @@ class IAMManager:
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "")
             if error_code == "DeleteConflict":
-                logger.info(
-                    f"Instance profile {profile_name} has dependencies, deferring"
-                )
+                logger.info(f"Instance profile {profile_name} has dependencies, deferring")
                 return "deferred"
             elif error_code == "NoSuchEntity":
                 logger.info(f"Instance profile {profile_name} already deleted")

@@ -17,7 +17,6 @@ import logging
 import os
 import threading
 import time
-from typing import List
 
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
@@ -138,13 +137,10 @@ def test_property13_invalid_batch_size_defaults_to_one(invalid_size: int, caplog
 
     # Should have logged a warning about invalid value
     warning_logged = any(
-        "invalid" in record.message.lower()
-        and "batch_delete_size" in record.message.lower()
+        "invalid" in record.message.lower() and "batch_delete_size" in record.message.lower()
         for record in caplog.records
     )
-    assert (
-        warning_logged
-    ), f"Expected warning about invalid BATCH_DELETE_SIZE '{invalid_size}'"
+    assert warning_logged, f"Expected warning about invalid BATCH_DELETE_SIZE '{invalid_size}'"
 
 
 @settings(
@@ -176,13 +172,10 @@ def test_property13_non_integer_batch_size_defaults_to_one(invalid_value: str, c
 
     # Should have logged a warning about invalid value
     warning_logged = any(
-        "invalid" in record.message.lower()
-        and "batch_delete_size" in record.message.lower()
+        "invalid" in record.message.lower() and "batch_delete_size" in record.message.lower()
         for record in caplog.records
     )
-    assert (
-        warning_logged
-    ), f"Expected warning about invalid BATCH_DELETE_SIZE '{invalid_value}'"
+    assert warning_logged, f"Expected warning about invalid BATCH_DELETE_SIZE '{invalid_value}'"
 
 
 @settings(max_examples=100, deadline=10000)
@@ -190,7 +183,7 @@ def test_property13_non_integer_batch_size_defaults_to_one(invalid_value: str, c
     resources=resource_list_strategy,
     batch_size=st.integers(min_value=1, max_value=10),
 )
-def test_property13_all_resources_processed(resources: List[str], batch_size: int):
+def test_property13_all_resources_processed(resources: list[str], batch_size: int):
     """
     Feature: packer-resource-reaper, Property 13: Batch Delete Processing
 
@@ -226,9 +219,7 @@ def test_property13_all_resources_processed(resources: List[str], batch_size: in
     ),
     batch_size=st.integers(min_value=2, max_value=5),
 )
-def test_property13_concurrent_execution_within_batch(
-    resources: List[str], batch_size: int
-):
+def test_property13_concurrent_execution_within_batch(resources: list[str], batch_size: int):
     """
     Feature: packer-resource-reaper, Property 13: Batch Delete Processing
 
@@ -266,9 +257,9 @@ def test_property13_concurrent_execution_within_batch(
     if len(resources) >= batch_size and batch_size > 1:
         # Max concurrent should be at least 2 (or batch_size if enough resources)
         min(batch_size, len(resources))
-        assert (
-            max_concurrent[0] >= 2
-        ), f"Expected concurrent execution, but max concurrent was {max_concurrent[0]}"
+        assert max_concurrent[0] >= 2, (
+            f"Expected concurrent execution, but max concurrent was {max_concurrent[0]}"
+        )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -281,7 +272,7 @@ def test_property13_concurrent_execution_within_batch(
     ),
     batch_size=st.integers(min_value=2, max_value=5),
 )
-def test_property13_batch_completion_before_next(resources: List[str], batch_size: int):
+def test_property13_batch_completion_before_next(resources: list[str], batch_size: int):
     """
     Feature: packer-resource-reaper, Property 13: Batch Delete Processing
 
@@ -293,7 +284,7 @@ def test_property13_batch_completion_before_next(resources: List[str], batch_siz
     processor = BatchProcessor(batch_size=batch_size)
 
     # Track batch boundaries
-    operation_order: List[str] = []
+    operation_order: list[str] = []
     lock = threading.Lock()
     counter = [0]
 
@@ -332,14 +323,12 @@ def test_property13_batch_completion_before_next(resources: List[str], batch_siz
         unique=True,
     ),
     batch_size=st.integers(min_value=1, max_value=5),
-    fail_indices=st.lists(
-        st.integers(min_value=0, max_value=19), max_size=5, unique=True
-    ),
+    fail_indices=st.lists(st.integers(min_value=0, max_value=19), max_size=5, unique=True),
 )
 def test_property13_failure_handling_continues_processing(
-    resources: List[str],
+    resources: list[str],
     batch_size: int,
-    fail_indices: List[int],
+    fail_indices: list[int],
 ):
     """
     Feature: packer-resource-reaper, Property 13: Batch Delete Processing
@@ -439,7 +428,7 @@ def test_property13_empty_resource_list():
         unique=True,
     ),
 )
-def test_property13_sequential_processing_with_batch_size_one(resources: List[str]):
+def test_property13_sequential_processing_with_batch_size_one(resources: list[str]):
     """
     Feature: packer-resource-reaper, Property 13: Batch Delete Processing
 
@@ -450,7 +439,7 @@ def test_property13_sequential_processing_with_batch_size_one(resources: List[st
     processor = BatchProcessor(batch_size=1)
 
     # Track execution order
-    execution_order: List[str] = []
+    execution_order: list[str] = []
     lock = threading.Lock()
 
     def delete_func(resource_id: str) -> bool:

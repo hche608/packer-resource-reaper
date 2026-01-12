@@ -12,8 +12,7 @@ This module tests the stateless error recovery behavior of the reaper:
 - Detailed error logging to CloudWatch (6.3)
 """
 
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 from botocore.exceptions import ClientError
@@ -35,7 +34,7 @@ def create_instance(
     state: str = "running",
 ) -> PackerInstance:
     """Helper to create a PackerInstance for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerInstance(
         resource_id=instance_id,
         resource_type=ResourceType.INSTANCE,
@@ -57,7 +56,7 @@ def create_security_group(
     group_name: str = "packer_sg",
 ) -> PackerSecurityGroup:
     """Helper to create a PackerSecurityGroup for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerSecurityGroup(
         resource_id=group_id,
         resource_type=ResourceType.SECURITY_GROUP,
@@ -76,7 +75,7 @@ def create_volume(
     state: str = "available",
 ) -> PackerVolume:
     """Helper to create a PackerVolume for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerVolume(
         resource_id=volume_id,
         resource_type=ResourceType.VOLUME,
@@ -92,9 +91,9 @@ def create_volume(
 
 
 def create_mock_ec2_client(
-    dependency_violations: Optional[List[str]] = None,
-    rate_limit_resources: Optional[List[str]] = None,
-    permanent_errors: Optional[List[str]] = None,
+    dependency_violations: list[str] | None = None,
+    rate_limit_resources: list[str] | None = None,
+    permanent_errors: list[str] | None = None,
 ) -> MagicMock:
     """Create a mock EC2 client that simulates various error conditions."""
     mock_client = MagicMock()
@@ -119,9 +118,7 @@ def create_mock_ec2_client(
                     },
                     "TerminateInstances",
                 )
-            results.append(
-                {"InstanceId": iid, "CurrentState": {"Name": "shutting-down"}}
-            )
+            results.append({"InstanceId": iid, "CurrentState": {"Name": "shutting-down"}})
         return {"TerminatingInstances": results}
 
     def delete_security_group(GroupId):
@@ -255,19 +252,19 @@ def test_dependency_violations_cause_deferral(
     expected_deleted = num_security_groups - num_dependency_violations
     expected_deferred = num_dependency_violations
 
-    assert (
-        len(result.deleted_security_groups) == expected_deleted
-    ), f"Expected {expected_deleted} deleted SGs, got {len(result.deleted_security_groups)}"
+    assert len(result.deleted_security_groups) == expected_deleted, (
+        f"Expected {expected_deleted} deleted SGs, got {len(result.deleted_security_groups)}"
+    )
 
-    assert (
-        len(result.deferred_resources) == expected_deferred
-    ), f"Expected {expected_deferred} deferred resources, got {len(result.deferred_resources)}"
+    assert len(result.deferred_resources) == expected_deferred, (
+        f"Expected {expected_deferred} deferred resources, got {len(result.deferred_resources)}"
+    )
 
     # All dependency violation resources should be in deferred list
     for sg_id in dependency_violations:
-        assert (
-            sg_id in result.deferred_resources
-        ), f"Security group {sg_id} with dependency violation should be deferred"
+        assert sg_id in result.deferred_resources, (
+            f"Security group {sg_id} with dependency violation should be deferred"
+        )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -294,9 +291,7 @@ def test_partial_cleanup_continues_with_remaining_resources(
     num_sg_failures = min(num_sg_failures, num_security_groups)
 
     # Create resources
-    instances = [
-        create_instance(instance_id=f"i-{i:08d}") for i in range(num_instances)
-    ]
+    instances = [create_instance(instance_id=f"i-{i:08d}") for i in range(num_instances)]
 
     security_groups = [
         create_security_group(
@@ -321,9 +316,9 @@ def test_partial_cleanup_continues_with_remaining_resources(
     result = engine.cleanup_resources(resources)
 
     # Verify: all instances should be terminated (no failures)
-    assert (
-        len(result.terminated_instances) == num_instances
-    ), f"Expected {num_instances} terminated instances"
+    assert len(result.terminated_instances) == num_instances, (
+        f"Expected {num_instances} terminated instances"
+    )
 
     # Verify: successful SGs should be deleted, failed ones deferred
     assert len(result.deleted_security_groups) == num_security_groups - num_sg_failures
@@ -378,18 +373,18 @@ def test_permanent_errors_recorded_separately_from_deferrals(
     result = engine.cleanup_resources(resources)
 
     # Permanent errors should be in errors dict, not deferred
-    assert (
-        len(result.errors) == num_permanent_errors
-    ), f"Expected {num_permanent_errors} errors, got {len(result.errors)}"
+    assert len(result.errors) == num_permanent_errors, (
+        f"Expected {num_permanent_errors} errors, got {len(result.errors)}"
+    )
 
     # Successful deletions
     assert len(result.deleted_security_groups) == num_resources - num_permanent_errors
 
     # Permanent errors should not be deferred
     for sg_id in permanent_errors:
-        assert (
-            sg_id not in result.deferred_resources
-        ), f"Permanent error resource {sg_id} should not be deferred"
+        assert sg_id not in result.deferred_resources, (
+            f"Permanent error resource {sg_id} should not be deferred"
+        )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -433,14 +428,14 @@ def test_dependency_violation_logged_and_continued(
 
     # Verify: cleanup continued despite errors
     expected_deleted = num_security_groups - num_dependency_violations
-    assert (
-        len(result.deleted_security_groups) == expected_deleted
-    ), "Cleanup should continue after DependencyViolation errors"
+    assert len(result.deleted_security_groups) == expected_deleted, (
+        "Cleanup should continue after DependencyViolation errors"
+    )
 
     # Verify: deferred resources are tracked for re-identification
-    assert (
-        len(result.deferred_resources) == num_dependency_violations
-    ), "DependencyViolation resources should be deferred for next execution"
+    assert len(result.deferred_resources) == num_dependency_violations, (
+        "DependencyViolation resources should be deferred for next execution"
+    )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -460,9 +455,7 @@ def test_stateless_execution_fresh_scan(
 
     Validates: Requirements 3.1, 3.2
     """
-    instances = [
-        create_instance(instance_id=f"i-{i:08d}") for i in range(num_instances)
-    ]
+    instances = [create_instance(instance_id=f"i-{i:08d}") for i in range(num_instances)]
 
     security_groups = [
         create_security_group(
@@ -569,9 +562,7 @@ def test_multiple_error_types_handled_independently(
     num_instance_errors = min(num_instance_errors, num_instances)
     num_sg_errors = min(num_sg_errors, num_security_groups)
 
-    instances = [
-        create_instance(instance_id=f"i-{i:08d}") for i in range(num_instances)
-    ]
+    instances = [create_instance(instance_id=f"i-{i:08d}") for i in range(num_instances)]
 
     security_groups = [
         create_security_group(
@@ -599,14 +590,12 @@ def test_multiple_error_types_handled_independently(
     result = engine.cleanup_resources(resources)
 
     # Verify: instance errors recorded separately
-    assert (
-        len(result.errors) == num_instance_errors
-    ), f"Expected {num_instance_errors} instance errors"
+    assert len(result.errors) == num_instance_errors, (
+        f"Expected {num_instance_errors} instance errors"
+    )
 
     # Verify: SG dependency violations deferred
-    assert (
-        len(result.deferred_resources) == num_sg_errors
-    ), f"Expected {num_sg_errors} deferred SGs"
+    assert len(result.deferred_resources) == num_sg_errors, f"Expected {num_sg_errors} deferred SGs"
 
     # Verify: successful operations completed
     expected_terminated = num_instances - num_instance_errors

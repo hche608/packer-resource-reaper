@@ -8,8 +8,7 @@ but are now unattached/unassociated. These are collected as part of the
 cleanup process for instances matching the key pair pattern.
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import List, Set
+from datetime import UTC, datetime, timedelta
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -30,7 +29,7 @@ def create_instance(
     tags: dict = None,
 ) -> PackerInstance:
     """Helper to create a PackerInstance for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerInstance(
         resource_id=instance_id,
         resource_type=ResourceType.INSTANCE,
@@ -55,7 +54,7 @@ def create_volume(
     creation_time: datetime = None,
 ) -> PackerVolume:
     """Helper to create a PackerVolume for testing."""
-    now = creation_time or datetime.now(timezone.utc)
+    now = creation_time or datetime.now(UTC)
     return PackerVolume(
         resource_id=volume_id,
         resource_type=ResourceType.VOLUME,
@@ -77,7 +76,7 @@ def create_snapshot(
     creation_time: datetime = None,
 ) -> PackerSnapshot:
     """Helper to create a PackerSnapshot for testing."""
-    now = creation_time or datetime.now(timezone.utc)
+    now = creation_time or datetime.now(UTC)
     return PackerSnapshot(
         resource_id=snapshot_id,
         resource_type=ResourceType.SNAPSHOT,
@@ -100,7 +99,7 @@ def create_elastic_ip(
     creation_time: datetime = None,
 ) -> PackerElasticIP:
     """Helper to create a PackerElasticIP for testing."""
-    now = creation_time or datetime.now(timezone.utc)
+    now = creation_time or datetime.now(UTC)
     return PackerElasticIP(
         resource_id=allocation_id,
         resource_type=ResourceType.ELASTIC_IP,
@@ -126,13 +125,11 @@ def is_orphaned_eip(eip: PackerElasticIP) -> bool:
 
 
 def filter_orphaned_snapshots(
-    snapshots: List[PackerSnapshot],
-    registered_ami_snapshots: Set[str],
-) -> List[PackerSnapshot]:
+    snapshots: list[PackerSnapshot],
+    registered_ami_snapshots: set[str],
+) -> list[PackerSnapshot]:
     """Filter snapshots that are orphaned (not used by registered AMIs)."""
-    return [
-        snap for snap in snapshots if snap.resource_id not in registered_ami_snapshots
-    ]
+    return [snap for snap in snapshots if snap.resource_id not in registered_ami_snapshots]
 
 
 # Strategies for generating test data
@@ -196,9 +193,9 @@ def test_orphaned_volume_detection(
     # A volume is orphaned if available and unattached
     expected_orphaned = is_available and not is_attached
 
-    assert (
-        orphaned == expected_orphaned
-    ), f"Volume with state={state}, attached={is_attached} should be orphaned={expected_orphaned}"
+    assert orphaned == expected_orphaned, (
+        f"Volume with state={state}, attached={is_attached} should be orphaned={expected_orphaned}"
+    )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -238,9 +235,9 @@ def test_orphaned_volume_subset_detection(num_volumes: int):
     orphaned_volumes = [v for v in volumes if is_orphaned_volume(v)]
     orphaned_ids = [v.resource_id for v in orphaned_volumes]
 
-    assert set(orphaned_ids) == set(
-        expected_orphaned
-    ), f"Expected orphaned volumes: {expected_orphaned}, got: {orphaned_ids}"
+    assert set(orphaned_ids) == set(expected_orphaned), (
+        f"Expected orphaned volumes: {expected_orphaned}, got: {orphaned_ids}"
+    )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -270,9 +267,9 @@ def test_unassociated_eip_detection(
     # Check if EIP is orphaned
     orphaned = is_orphaned_eip(eip)
 
-    assert orphaned == (
-        not is_associated
-    ), f"EIP with associated={is_associated} should be orphaned={not is_associated}"
+    assert orphaned == (not is_associated), (
+        f"EIP with associated={is_associated} should be orphaned={not is_associated}"
+    )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -311,9 +308,9 @@ def test_unassociated_eip_subset_detection(num_eips: int):
     orphaned_eips = [e for e in eips if is_orphaned_eip(e)]
     orphaned_ids = [e.resource_id for e in orphaned_eips]
 
-    assert set(orphaned_ids) == set(
-        expected_orphaned
-    ), f"Expected orphaned EIPs: {expected_orphaned}, got: {orphaned_ids}"
+    assert set(orphaned_ids) == set(expected_orphaned), (
+        f"Expected orphaned EIPs: {expected_orphaned}, got: {orphaned_ids}"
+    )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -342,9 +339,9 @@ def test_orphaned_snapshot_detection(
     orphaned_snapshots = filter_orphaned_snapshots([snapshot], registered_ami_snapshots)
     is_orphaned = len(orphaned_snapshots) == 1
 
-    assert is_orphaned == (
-        not is_registered_ami
-    ), f"Snapshot registered={is_registered_ami} should be orphaned={not is_registered_ami}"
+    assert is_orphaned == (not is_registered_ami), (
+        f"Snapshot registered={is_registered_ami} should be orphaned={not is_registered_ami}"
+    )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -380,9 +377,9 @@ def test_orphaned_snapshot_subset_detection(num_snapshots: int):
     orphaned_snapshots = filter_orphaned_snapshots(snapshots, registered_ami_snapshots)
     orphaned_ids = [s.resource_id for s in orphaned_snapshots]
 
-    assert set(orphaned_ids) == set(
-        expected_orphaned
-    ), f"Expected orphaned snapshots: {expected_orphaned}, got: {orphaned_ids}"
+    assert set(orphaned_ids) == set(expected_orphaned), (
+        f"Expected orphaned snapshots: {expected_orphaned}, got: {orphaned_ids}"
+    )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -402,15 +399,13 @@ def test_temporal_correlation_volume_detection(
 
     Validates: Requirements 2.2
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Zombie instance creation time
     zombie_creation_time = now - timedelta(hours=zombie_age_hours)
 
     # Volume creation time (within offset of zombie)
-    volume_creation_time = zombie_creation_time + timedelta(
-        hours=volume_age_offset_hours
-    )
+    volume_creation_time = zombie_creation_time + timedelta(hours=volume_age_offset_hours)
 
     create_volume(
         volume_id="vol-test123",
@@ -420,14 +415,12 @@ def test_temporal_correlation_volume_detection(
     )
 
     # Check temporal correlation (within 2 hour window)
-    time_diff = abs(
-        (volume_creation_time - zombie_creation_time).total_seconds() / 3600
-    )
+    time_diff = abs((volume_creation_time - zombie_creation_time).total_seconds() / 3600)
     is_temporally_correlated = time_diff <= 2
 
-    assert is_temporally_correlated == (
-        abs(volume_age_offset_hours) <= 2
-    ), f"Volume with offset {volume_age_offset_hours}h should be correlated={is_temporally_correlated}"
+    assert is_temporally_correlated == (abs(volume_age_offset_hours) <= 2), (
+        f"Volume with offset {volume_age_offset_hours}h should be correlated={is_temporally_correlated}"
+    )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -497,10 +490,6 @@ def test_combined_orphaned_resource_detection(num_resources: int):
     orphaned_snapshots = filter_orphaned_snapshots(snapshots, registered_ami_snapshots)
 
     # Verify all orphaned resources are detected
-    assert set(v.resource_id for v in orphaned_volumes) == set(
-        expected_orphaned_volumes
-    )
+    assert set(v.resource_id for v in orphaned_volumes) == set(expected_orphaned_volumes)
     assert set(e.resource_id for e in orphaned_eips) == set(expected_orphaned_eips)
-    assert set(s.resource_id for s in orphaned_snapshots) == set(
-        expected_orphaned_snapshots
-    )
+    assert set(s.resource_id for s in orphaned_snapshots) == set(expected_orphaned_snapshots)

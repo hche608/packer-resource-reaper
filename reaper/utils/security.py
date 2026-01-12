@@ -9,7 +9,7 @@ Requirements: 6.2, 6.5
 
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 # AWS Resource ID patterns
 AWS_RESOURCE_PATTERNS = {
@@ -48,8 +48,8 @@ class ValidationResult:
     """Result of input validation."""
 
     is_valid: bool
-    errors: List[str]
-    sanitized_value: Optional[Any] = None
+    errors: list[str]
+    sanitized_value: Any | None = None
 
     @classmethod
     def valid(cls, sanitized_value: Any = None) -> "ValidationResult":
@@ -57,7 +57,7 @@ class ValidationResult:
         return cls(is_valid=True, errors=[], sanitized_value=sanitized_value)
 
     @classmethod
-    def invalid(cls, errors: List[str]) -> "ValidationResult":
+    def invalid(cls, errors: list[str]) -> "ValidationResult":
         """Create an invalid result."""
         return cls(is_valid=False, errors=errors)
 
@@ -83,9 +83,7 @@ class InputValidator:
             return ValidationResult.invalid(["Resource ID cannot be empty"])
 
         if len(resource_id) > MAX_LENGTHS["resource_id"]:
-            errors.append(
-                f"Resource ID exceeds maximum length of {MAX_LENGTHS['resource_id']}"
-            )
+            errors.append(f"Resource ID exceeds maximum length of {MAX_LENGTHS['resource_id']}")
 
         # Check for dangerous characters
         if any(c in resource_id for c in DANGEROUS_CHARACTERS):
@@ -94,9 +92,7 @@ class InputValidator:
         # Validate against pattern if known type
         pattern = AWS_RESOURCE_PATTERNS.get(resource_type)
         if pattern and not pattern.match(resource_id):
-            errors.append(
-                f"Resource ID does not match expected pattern for {resource_type}"
-            )
+            errors.append(f"Resource ID does not match expected pattern for {resource_type}")
 
         if errors:
             return ValidationResult.invalid(errors)
@@ -205,9 +201,7 @@ class InputValidator:
         errors = []
 
         if len(value) > MAX_LENGTHS["tag_value"]:
-            errors.append(
-                f"Tag value exceeds maximum length of {MAX_LENGTHS['tag_value']}"
-            )
+            errors.append(f"Tag value exceeds maximum length of {MAX_LENGTHS['tag_value']}")
 
         if not TAG_VALUE_PATTERN.match(value):
             errors.append("Tag value contains invalid characters")
@@ -218,7 +212,7 @@ class InputValidator:
         return ValidationResult.valid(value)
 
     @staticmethod
-    def validate_tags(tags: Dict[str, str]) -> ValidationResult:
+    def validate_tags(tags: dict[str, str]) -> ValidationResult:
         """
         Validate a dictionary of tags.
 
@@ -242,9 +236,7 @@ class InputValidator:
 
             value_result = InputValidator.validate_tag_value(value)
             if not value_result.is_valid:
-                errors.extend(
-                    [f"Tag value for '{key}': {e}" for e in value_result.errors]
-                )
+                errors.extend([f"Tag value for '{key}': {e}" for e in value_result.errors])
                 continue
 
             sanitized_tags[key] = value
@@ -342,8 +334,8 @@ class ScopeEnforcer:
 
     def __init__(
         self,
-        allowed_regions: Optional[Set[str]] = None,
-        allowed_account_ids: Optional[Set[str]] = None,
+        allowed_regions: set[str] | None = None,
+        allowed_account_ids: set[str] | None = None,
     ):
         """
         Initialize scope enforcer.
@@ -355,7 +347,7 @@ class ScopeEnforcer:
         self.allowed_regions = allowed_regions
         self.allowed_account_ids = allowed_account_ids
 
-    def is_region_in_scope(self, region: str) -> Tuple[bool, str]:
+    def is_region_in_scope(self, region: str) -> tuple[bool, str]:
         """
         Check if a region is within the allowed scope.
 
@@ -373,7 +365,7 @@ class ScopeEnforcer:
 
         return False, f"Region {region} is not in allowed list: {self.allowed_regions}"
 
-    def is_account_in_scope(self, account_id: str) -> Tuple[bool, str]:
+    def is_account_in_scope(self, account_id: str) -> tuple[bool, str]:
         """
         Check if an account is within the allowed scope.
 
@@ -395,7 +387,7 @@ class ScopeEnforcer:
         self,
         region: str,
         account_id: str,
-    ) -> Tuple[bool, List[str]]:
+    ) -> tuple[bool, list[str]]:
         """
         Check if a resource is within the allowed scope.
 
@@ -454,7 +446,7 @@ class LogSanitizer:
         return sanitized
 
     @classmethod
-    def sanitize_dict(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+    def sanitize_dict(cls, data: dict[str, Any]) -> dict[str, Any]:
         """
         Sanitize a dictionary for logging.
 
@@ -474,11 +466,9 @@ class LogSanitizer:
             elif isinstance(value, str):
                 sanitized[key] = cls.sanitize(value)
             elif isinstance(value, dict):
-                sanitized[key] = cls.sanitize_dict(value)
+                sanitized[key] = cls.sanitize_dict(value)  # type: ignore[assignment]
             elif isinstance(value, list):
-                sanitized[key] = [
-                    cls.sanitize(v) if isinstance(v, str) else v for v in value
-                ]
+                sanitized[key] = [cls.sanitize(v) if isinstance(v, str) else v for v in value]  # type: ignore[assignment]
             else:
                 sanitized[key] = value
 
@@ -486,7 +476,7 @@ class LogSanitizer:
 
 
 def validate_cleanup_request(
-    resource_ids: List[str],
+    resource_ids: list[str],
     resource_type: str,
     region: str,
     account_id: str,
@@ -538,23 +528,23 @@ class FilterScopeEnforcer:
     those registered resources.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the filter scope enforcer with empty registries."""
-        self._registered_instance_ids: Set[str] = set()
-        self._registered_volume_ids: Set[str] = set()
-        self._registered_snapshot_ids: Set[str] = set()
-        self._registered_security_group_ids: Set[str] = set()
-        self._registered_key_pair_ids: Set[str] = set()
-        self._registered_eip_ids: Set[str] = set()
+        self._registered_instance_ids: set[str] = set()
+        self._registered_volume_ids: set[str] = set()
+        self._registered_snapshot_ids: set[str] = set()
+        self._registered_security_group_ids: set[str] = set()
+        self._registered_key_pair_ids: set[str] = set()
+        self._registered_eip_ids: set[str] = set()
 
     def register_filtered_resources(
         self,
-        instance_ids: Optional[List[str]] = None,
-        volume_ids: Optional[List[str]] = None,
-        snapshot_ids: Optional[List[str]] = None,
-        security_group_ids: Optional[List[str]] = None,
-        key_pair_ids: Optional[List[str]] = None,
-        eip_ids: Optional[List[str]] = None,
+        instance_ids: list[str] | None = None,
+        volume_ids: list[str] | None = None,
+        snapshot_ids: list[str] | None = None,
+        security_group_ids: list[str] | None = None,
+        key_pair_ids: list[str] | None = None,
+        eip_ids: list[str] | None = None,
     ) -> None:
         """
         Register resources that have passed through the filter pipeline.
@@ -582,7 +572,7 @@ class FilterScopeEnforcer:
         if eip_ids:
             self._registered_eip_ids.update(eip_ids)
 
-    def is_instance_in_scope(self, instance_id: str) -> Tuple[bool, str]:
+    def is_instance_in_scope(self, instance_id: str) -> tuple[bool, str]:
         """
         Check if an instance is registered for cleanup.
 
@@ -599,7 +589,7 @@ class FilterScopeEnforcer:
             f"Instance {instance_id} was not registered through filter pipeline",
         )
 
-    def is_volume_in_scope(self, volume_id: str) -> Tuple[bool, str]:
+    def is_volume_in_scope(self, volume_id: str) -> tuple[bool, str]:
         """
         Check if a volume is registered for cleanup.
 
@@ -613,7 +603,7 @@ class FilterScopeEnforcer:
             return True, f"Volume {volume_id} is registered for cleanup"
         return False, f"Volume {volume_id} was not registered through filter pipeline"
 
-    def is_snapshot_in_scope(self, snapshot_id: str) -> Tuple[bool, str]:
+    def is_snapshot_in_scope(self, snapshot_id: str) -> tuple[bool, str]:
         """
         Check if a snapshot is registered for cleanup.
 
@@ -630,7 +620,7 @@ class FilterScopeEnforcer:
             f"Snapshot {snapshot_id} was not registered through filter pipeline",
         )
 
-    def is_security_group_in_scope(self, sg_id: str) -> Tuple[bool, str]:
+    def is_security_group_in_scope(self, sg_id: str) -> tuple[bool, str]:
         """
         Check if a security group is registered for cleanup.
 
@@ -647,7 +637,7 @@ class FilterScopeEnforcer:
             f"Security group {sg_id} was not registered through filter pipeline",
         )
 
-    def is_key_pair_in_scope(self, key_pair_id: str) -> Tuple[bool, str]:
+    def is_key_pair_in_scope(self, key_pair_id: str) -> tuple[bool, str]:
         """
         Check if a key pair is registered for cleanup.
 
@@ -664,7 +654,7 @@ class FilterScopeEnforcer:
             f"Key pair {key_pair_id} was not registered through filter pipeline",
         )
 
-    def is_eip_in_scope(self, eip_id: str) -> Tuple[bool, str]:
+    def is_eip_in_scope(self, eip_id: str) -> tuple[bool, str]:
         """
         Check if an EIP is registered for cleanup.
 
@@ -680,12 +670,12 @@ class FilterScopeEnforcer:
 
     def validate_cleanup_targets(
         self,
-        instance_ids: Optional[List[str]] = None,
-        volume_ids: Optional[List[str]] = None,
-        snapshot_ids: Optional[List[str]] = None,
-        security_group_ids: Optional[List[str]] = None,
-        key_pair_ids: Optional[List[str]] = None,
-        eip_ids: Optional[List[str]] = None,
+        instance_ids: list[str] | None = None,
+        volume_ids: list[str] | None = None,
+        snapshot_ids: list[str] | None = None,
+        security_group_ids: list[str] | None = None,
+        key_pair_ids: list[str] | None = None,
+        eip_ids: list[str] | None = None,
     ) -> ValidationResult:
         """
         Validate that all cleanup targets are registered through the filter pipeline.
@@ -756,7 +746,7 @@ class FilterScopeEnforcer:
         self._registered_key_pair_ids.clear()
         self._registered_eip_ids.clear()
 
-    def get_registered_counts(self) -> Dict[str, int]:
+    def get_registered_counts(self) -> dict[str, int]:
         """
         Get counts of registered resources by type.
 
@@ -773,9 +763,7 @@ class FilterScopeEnforcer:
         }
 
 
-def validate_key_pair_pattern(
-    key_name: Optional[str], pattern: str = "packer_"
-) -> ValidationResult:
+def validate_key_pair_pattern(key_name: str | None, pattern: str = "packer_") -> ValidationResult:
     """
     Validate that a key pair name matches the expected Packer pattern.
 
@@ -810,11 +798,11 @@ def validate_key_pair_pattern(
 
 def validate_instance_for_cleanup(
     instance_id: str,
-    key_name: Optional[str],
+    key_name: str | None,
     age_hours: float,
     max_age_hours: int,
     key_pattern: str = "packer_",
-) -> ValidationResult:
+) -> ValidationResult:  # noqa: D417
     """
     Validate that an instance meets all criteria for cleanup.
 

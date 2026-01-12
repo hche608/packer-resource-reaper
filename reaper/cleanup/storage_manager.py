@@ -6,7 +6,7 @@ instances being terminated and cleanup operations as per Requirements 2.2, 2.8.
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from reaper.models import PackerSnapshot, PackerVolume, ResourceType
 
@@ -35,7 +35,7 @@ class StorageManager:
 
     def get_volumes_for_instance(
         self, instance_id: str, account_id: str, region: str
-    ) -> List[PackerVolume]:
+    ) -> list[PackerVolume]:
         """
         Get EBS volumes attached to a specific instance.
 
@@ -59,9 +59,7 @@ class StorageManager:
                 tags = {t["Key"]: t["Value"] for t in volume.get("Tags", [])}
 
                 attachments = volume.get("Attachments", [])
-                attached_instance = (
-                    attachments[0]["InstanceId"] if attachments else None
-                )
+                attached_instance = attachments[0]["InstanceId"] if attachments else None
 
                 volumes.append(
                     PackerVolume(
@@ -83,8 +81,8 @@ class StorageManager:
         return volumes
 
     def get_volumes_by_ids(
-        self, volume_ids: List[str], account_id: str, region: str
-    ) -> List[PackerVolume]:
+        self, volume_ids: list[str], account_id: str, region: str
+    ) -> list[PackerVolume]:
         """
         Get EBS volumes by their IDs.
 
@@ -106,9 +104,7 @@ class StorageManager:
                 tags = {t["Key"]: t["Value"] for t in volume.get("Tags", [])}
 
                 attachments = volume.get("Attachments", [])
-                attached_instance = (
-                    attachments[0]["InstanceId"] if attachments else None
-                )
+                attached_instance = attachments[0]["InstanceId"] if attachments else None
 
                 volumes.append(
                     PackerVolume(
@@ -133,8 +129,8 @@ class StorageManager:
         self,
         account_id: str,
         region: str,
-        filters: Optional[List[Dict[str, Any]]] = None,
-    ) -> List[PackerVolume]:
+        filters: list[dict[str, Any]] | None = None,
+    ) -> list[PackerVolume]:
         """
         Scan all EBS volumes in the account.
 
@@ -158,9 +154,7 @@ class StorageManager:
                     tags = {t["Key"]: t["Value"] for t in volume.get("Tags", [])}
 
                     attachments = volume.get("Attachments", [])
-                    attached_instance = (
-                        attachments[0]["InstanceId"] if attachments else None
-                    )
+                    attached_instance = attachments[0]["InstanceId"] if attachments else None
 
                     volumes.append(
                         PackerVolume(
@@ -183,8 +177,8 @@ class StorageManager:
         return volumes
 
     def delete_volumes(
-        self, volumes: List[PackerVolume]
-    ) -> tuple[List[str], List[str], dict]:
+        self, volumes: list[PackerVolume]
+    ) -> tuple[list[str], list[str], dict[str, str]]:
         """
         Delete EBS volumes.
 
@@ -222,9 +216,7 @@ class StorageManager:
 
         # Check if volume is attached
         if volume.attached_instance:
-            logger.info(
-                f"Volume {volume_id} attached to {volume.attached_instance}, deferring"
-            )
+            logger.info(f"Volume {volume_id} attached to {volume.attached_instance}, deferring")
             return "deferred"
 
         # Check volume state
@@ -241,8 +233,8 @@ class StorageManager:
         return "deleted"
 
     def delete_snapshots(
-        self, snapshots: List[PackerSnapshot], registered_ami_snapshots: Set[str] = None
-    ) -> tuple[List[str], List[str], dict]:
+        self, snapshots: list[PackerSnapshot], registered_ami_snapshots: set[str] | None = None
+    ) -> tuple[list[str], list[str], dict[str, str]]:
         """
         Delete EBS snapshots.
 
@@ -271,9 +263,7 @@ class StorageManager:
 
         return deleted, deferred, errors
 
-    def _delete_snapshot(
-        self, snapshot: PackerSnapshot, registered_ami_snapshots: Set[str]
-    ) -> str:
+    def _delete_snapshot(self, snapshot: PackerSnapshot, registered_ami_snapshots: set[str]) -> str:
         """
         Delete a single snapshot.
 
@@ -289,9 +279,7 @@ class StorageManager:
 
         # Check snapshot state
         if snapshot.state != "completed":
-            logger.info(
-                f"Snapshot {snapshot_id} not completed (state: {snapshot.state})"
-            )
+            logger.info(f"Snapshot {snapshot_id} not completed (state: {snapshot.state})")
             return "deferred"
 
         if self.dry_run:
@@ -302,7 +290,7 @@ class StorageManager:
         self.ec2.delete_snapshot(SnapshotId=snapshot_id)
         return "deleted"
 
-    def get_registered_ami_snapshots(self) -> Set[str]:
+    def get_registered_ami_snapshots(self) -> set[str]:
         """Get set of snapshot IDs used by registered AMIs."""
         snapshot_ids = set()
 
