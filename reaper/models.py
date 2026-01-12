@@ -3,7 +3,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional
 
 
 class ResourceType(Enum):
@@ -25,7 +24,7 @@ class PackerResource:
     resource_id: str
     resource_type: ResourceType
     creation_time: datetime
-    tags: Dict[str, str]
+    tags: dict[str, str]
     region: str
     account_id: str
 
@@ -37,11 +36,11 @@ class PackerInstance(PackerResource):
     instance_type: str
     state: str
     vpc_id: str
-    security_groups: List[str]
-    key_name: Optional[str]
+    security_groups: list[str]
+    key_name: str | None
     launch_time: datetime
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.resource_type = ResourceType.INSTANCE
 
 
@@ -51,10 +50,10 @@ class PackerVolume(PackerResource):
 
     size: int
     state: str
-    attached_instance: Optional[str]
-    snapshot_id: Optional[str]
+    attached_instance: str | None
+    snapshot_id: str | None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.resource_type = ResourceType.VOLUME
 
 
@@ -67,7 +66,7 @@ class PackerSnapshot(PackerResource):
     progress: str
     owner_id: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.resource_type = ResourceType.SNAPSHOT
 
 
@@ -79,7 +78,7 @@ class PackerSecurityGroup(PackerResource):
     vpc_id: str
     description: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.resource_type = ResourceType.SECURITY_GROUP
 
 
@@ -90,7 +89,7 @@ class PackerKeyPair(PackerResource):
     key_name: str
     key_fingerprint: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.resource_type = ResourceType.KEY_PAIR
 
 
@@ -100,10 +99,10 @@ class PackerElasticIP(PackerResource):
 
     public_ip: str
     allocation_id: str
-    association_id: Optional[str]
-    instance_id: Optional[str]
+    association_id: str | None
+    instance_id: str | None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.resource_type = ResourceType.ELASTIC_IP
 
 
@@ -115,9 +114,9 @@ class PackerInstanceProfile(PackerResource):
     instance_profile_id: str
     arn: str
     path: str
-    roles: List[str] = field(default_factory=list)
+    roles: list[str] = field(default_factory=list)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.resource_type = ResourceType.INSTANCE_PROFILE
 
 
@@ -125,13 +124,13 @@ class PackerInstanceProfile(PackerResource):
 class ResourceCollection:
     """Collection of resources identified for cleanup."""
 
-    instances: List[PackerInstance] = field(default_factory=list)
-    volumes: List[PackerVolume] = field(default_factory=list)
-    snapshots: List[PackerSnapshot] = field(default_factory=list)
-    security_groups: List[PackerSecurityGroup] = field(default_factory=list)
-    key_pairs: List[PackerKeyPair] = field(default_factory=list)
-    elastic_ips: List[PackerElasticIP] = field(default_factory=list)
-    instance_profiles: List["PackerInstanceProfile"] = field(default_factory=list)
+    instances: list[PackerInstance] = field(default_factory=list)
+    volumes: list[PackerVolume] = field(default_factory=list)
+    snapshots: list[PackerSnapshot] = field(default_factory=list)
+    security_groups: list[PackerSecurityGroup] = field(default_factory=list)
+    key_pairs: list[PackerKeyPair] = field(default_factory=list)
+    elastic_ips: list[PackerElasticIP] = field(default_factory=list)
+    instance_profiles: list["PackerInstanceProfile"] = field(default_factory=list)
 
     def is_empty(self) -> bool:
         """Check if the collection has no resources."""
@@ -162,15 +161,15 @@ class ResourceCollection:
 class CleanupResult:
     """Result of cleanup operations."""
 
-    terminated_instances: List[str] = field(default_factory=list)
-    deleted_volumes: List[str] = field(default_factory=list)
-    deleted_snapshots: List[str] = field(default_factory=list)
-    deleted_security_groups: List[str] = field(default_factory=list)
-    deleted_key_pairs: List[str] = field(default_factory=list)
-    released_elastic_ips: List[str] = field(default_factory=list)
-    deleted_instance_profiles: List[str] = field(default_factory=list)
-    deferred_resources: List[str] = field(default_factory=list)
-    errors: Dict[str, str] = field(default_factory=dict)
+    terminated_instances: list[str] = field(default_factory=list)
+    deleted_volumes: list[str] = field(default_factory=list)
+    deleted_snapshots: list[str] = field(default_factory=list)
+    deleted_security_groups: list[str] = field(default_factory=list)
+    deleted_key_pairs: list[str] = field(default_factory=list)
+    released_elastic_ips: list[str] = field(default_factory=list)
+    deleted_instance_profiles: list[str] = field(default_factory=list)
+    deferred_resources: list[str] = field(default_factory=list)
+    errors: dict[str, str] = field(default_factory=dict)
     dry_run: bool = False
 
     def total_cleaned(self) -> int:

@@ -7,7 +7,7 @@ This test validates that the pattern matching logic consistently identifies
 key pairs that start with the "packer_" prefix.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -21,7 +21,7 @@ def create_instance(
     instance_id: str = "i-test123",
 ) -> PackerInstance:
     """Helper to create a PackerInstance for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerInstance(
         resource_id=instance_id,
         resource_type=ResourceType.INSTANCE,
@@ -43,7 +43,7 @@ def create_key_pair(
     key_id: str = "key-test123",
 ) -> PackerKeyPair:
     """Helper to create a PackerKeyPair for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerKeyPair(
         resource_id=key_id,
         resource_type=ResourceType.KEY_PAIR,
@@ -89,9 +89,7 @@ def test_packer_prefix_always_matches(suffix: str):
     # Test with instance
     instance = create_instance(key_name=key_name)
     result = identity_filter.filter_instances([instance])
-    assert (
-        len(result) == 1
-    ), f"Instance with key '{key_name}' should match packer_* pattern"
+    assert len(result) == 1, f"Instance with key '{key_name}' should match packer_* pattern"
 
     # Test with key pair
     key_pair = create_key_pair(key_name=key_name)
@@ -143,9 +141,7 @@ def test_uppercase_packer_prefix_not_matched(suffix: str):
     for key_name in uppercase_variations:
         key_pair = create_key_pair(key_name=key_name)
         result = identity_filter.filter_key_pairs([key_pair])
-        assert (
-            len(result) == 0
-        ), f"Key pair '{key_name}' should NOT match (case-sensitive)"
+        assert len(result) == 0, f"Key pair '{key_name}' should NOT match (case-sensitive)"
 
 
 @settings(max_examples=100, deadline=5000)
@@ -164,16 +160,12 @@ def test_non_packer_prefix_never_matches(non_packer_key: str):
     # Test with instance (no packer tags or name)
     instance = create_instance(key_name=non_packer_key)
     result = identity_filter.filter_instances([instance])
-    assert (
-        len(result) == 0
-    ), f"Instance with non-packer key '{non_packer_key}' should NOT match"
+    assert len(result) == 0, f"Instance with non-packer key '{non_packer_key}' should NOT match"
 
     # Test with key pair
     key_pair = create_key_pair(key_name=non_packer_key)
     result = identity_filter.filter_key_pairs([key_pair])
-    assert (
-        len(result) == 0
-    ), f"Key pair '{non_packer_key}' should NOT match packer_* pattern"
+    assert len(result) == 0, f"Key pair '{non_packer_key}' should NOT match packer_* pattern"
 
 
 @settings(max_examples=100, deadline=5000)
@@ -259,9 +251,7 @@ def test_exact_packer_underscore_prefix_required(suffix: str):
     for key_name in non_matching_keys:
         key_pair = create_key_pair(key_name=key_name)
         result = identity_filter.filter_key_pairs([key_pair])
-        assert (
-            len(result) == 0
-        ), f"Key pair '{key_name}' should NOT match packer_* pattern"
+        assert len(result) == 0, f"Key pair '{key_name}' should NOT match packer_* pattern"
 
     # This SHOULD match
     matching_key = f"packer_{suffix}"

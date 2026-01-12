@@ -1,6 +1,6 @@
 # AWS SAM CLI Configuration for Packer Resource Reaper
 # This file provides default deployment settings for the SAM CLI.
-# 
+#
 # Usage:
 #   sam build
 #   sam deploy                    # Uses defaults from this file
@@ -29,9 +29,9 @@ region = "ap-southeast-2"
 parameter_overrides = [
     "MaxInstanceAgeHours=2",
     "DryRun=true",
-    "ScheduleExpression='rate(1 hour)'",
+    "ScheduleExpression='cron(0/15 * * * ? *)'",
     "LogLevel=INFO",
-    "BatchDeleteSize=1",
+    "BatchDeleteSize=5",
     "KeyPairPattern=packer_",
     "LogRetentionDays=1"
 ]

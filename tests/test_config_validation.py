@@ -39,14 +39,10 @@ invalid_sns_arn_strategy = st.text(min_size=1, max_size=50).filter(
 )
 
 # Strategy for dry run values that should be True
-dry_run_true_strategy = st.sampled_from(
-    ["true", "True", "TRUE", "1", "yes", "Yes", "YES"]
-)
+dry_run_true_strategy = st.sampled_from(["true", "True", "TRUE", "1", "yes", "Yes", "YES"])
 
 # Strategy for dry run values that should be False
-dry_run_false_strategy = st.sampled_from(
-    ["false", "False", "FALSE", "0", "no", "No", "NO", ""]
-)
+dry_run_false_strategy = st.sampled_from(["false", "False", "FALSE", "0", "no", "No", "NO", ""])
 
 # Strategy for positive integers (valid MaxInstanceAge)
 positive_integer_strategy = st.integers(min_value=1, max_value=168)
@@ -95,9 +91,9 @@ def test_valid_max_instance_age_parsing(max_age: int):
     config = ReaperConfig.from_environment(validate=False)
 
     assert config.max_instance_age_hours == max_age
-    assert (
-        len(config.validate()) == 0
-    ), f"Valid max_age {max_age} should not produce validation errors"
+    assert len(config.validate()) == 0, (
+        f"Valid max_age {max_age} should not produce validation errors"
+    )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -116,9 +112,7 @@ def test_invalid_max_instance_age_validation(max_age: int):
     config = ReaperConfig(max_instance_age_hours=max_age)
     errors = config.validate()
 
-    assert (
-        len(errors) > 0
-    ), f"Invalid max_age {max_age} should produce validation errors"
+    assert len(errors) > 0, f"Invalid max_age {max_age} should produce validation errors"
 
 
 @settings(max_examples=100, deadline=5000)
@@ -137,9 +131,7 @@ def test_dry_run_true_parsing(dry_run_value: str):
 
     config = ReaperConfig.from_environment(validate=False)
 
-    assert (
-        config.dry_run is True
-    ), f"DRY_RUN={dry_run_value} should result in dry_run=True"
+    assert config.dry_run is True, f"DRY_RUN={dry_run_value} should result in dry_run=True"
 
 
 @settings(max_examples=100, deadline=5000)
@@ -158,9 +150,7 @@ def test_dry_run_false_parsing(dry_run_value: str):
 
     config = ReaperConfig.from_environment(validate=False)
 
-    assert (
-        config.dry_run is False
-    ), f"DRY_RUN={dry_run_value} should result in dry_run=False"
+    assert config.dry_run is False, f"DRY_RUN={dry_run_value} should result in dry_run=False"
 
 
 @settings(max_examples=100, deadline=5000)
@@ -180,9 +170,9 @@ def test_valid_sns_arn_parsing(sns_arn: str):
     config = ReaperConfig.from_environment(validate=False)
 
     assert config.notification_topic_arn == sns_arn
-    assert (
-        len(config.validate()) == 0
-    ), f"Valid SNS ARN {sns_arn} should not produce validation errors"
+    assert len(config.validate()) == 0, (
+        f"Valid SNS ARN {sns_arn} should not produce validation errors"
+    )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -201,9 +191,7 @@ def test_invalid_sns_arn_validation(sns_arn: str):
     config = ReaperConfig(notification_topic_arn=sns_arn)
     errors = config.validate()
 
-    assert (
-        len(errors) > 0
-    ), f"Invalid SNS ARN {sns_arn} should produce validation errors"
+    assert len(errors) > 0, f"Invalid SNS ARN {sns_arn} should produce validation errors"
 
 
 @settings(max_examples=100, deadline=5000)
@@ -272,12 +260,10 @@ def test_property6_max_instance_age_rejects_non_positive(max_age: int):
     config = ReaperConfig(max_instance_age_hours=max_age)
     errors = config.validate()
 
-    assert (
-        len(errors) > 0
-    ), f"Non-positive max_age {max_age} should produce validation errors"
-    assert any(
-        "positive integer" in e.lower() for e in errors
-    ), f"Error should mention 'positive integer': {errors}"
+    assert len(errors) > 0, f"Non-positive max_age {max_age} should produce validation errors"
+    assert any("positive integer" in e.lower() for e in errors), (
+        f"Error should mention 'positive integer': {errors}"
+    )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -304,9 +290,7 @@ def test_property6_max_instance_age_rejects_non_integer_string(invalid_value: st
 
 
 @settings(max_examples=100, deadline=5000)
-@given(
-    initial_dry_run=st.booleans(), new_dry_run_value=st.sampled_from(["true", "false"])
-)
+@given(initial_dry_run=st.booleans(), new_dry_run_value=st.sampled_from(["true", "false"]))
 def test_property6_dry_run_explicit_configuration_change(
     initial_dry_run: bool, new_dry_run_value: str
 ):
@@ -330,9 +314,9 @@ def test_property6_dry_run_explicit_configuration_change(
 
     expected_new_state = new_dry_run_value.lower() == "true"
 
-    assert (
-        config2.dry_run == expected_new_state
-    ), f"Explicit DRY_RUN={new_dry_run_value} should result in dry_run={expected_new_state}"
+    assert config2.dry_run == expected_new_state, (
+        f"Explicit DRY_RUN={new_dry_run_value} should result in dry_run={expected_new_state}"
+    )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -357,9 +341,7 @@ def test_property6_dry_run_mode_accessor(dry_run: bool):
     max_age=valid_max_age_strategy,
     dry_run=st.booleans(),
 )
-def test_property6_configuration_from_environment_validates(
-    max_age: int, dry_run: bool
-):
+def test_property6_configuration_from_environment_validates(max_age: int, dry_run: bool):
     """
     Feature: packer-resource-reaper, Property 6: Configuration Validation and Parsing
 

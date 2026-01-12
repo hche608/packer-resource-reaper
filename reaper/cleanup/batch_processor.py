@@ -15,9 +15,10 @@ asyncio.gather with blocking boto3 calls would execute sequentially.
 """
 
 import logging
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Tuple, TypeVar
+from typing import TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +35,9 @@ class BatchResult:
         errors: Dict mapping resource ID to error message
     """
 
-    successful: List[str] = field(default_factory=list)
-    failed: List[str] = field(default_factory=list)
-    errors: dict = field(default_factory=dict)
+    successful: list[str] = field(default_factory=list)
+    failed: list[str] = field(default_factory=list)
+    errors: dict[str, str] = field(default_factory=dict)
 
 
 class BatchProcessor:
@@ -64,7 +65,7 @@ class BatchProcessor:
 
     def process_deletions(
         self,
-        resources: List[str],
+        resources: list[str],
         delete_func: Callable[[str], bool],
         resource_type: str = "resource",
     ) -> BatchResult:
@@ -96,26 +97,18 @@ class BatchProcessor:
         )
 
         # Process in batches
-        for batch_num, i in enumerate(
-            range(0, total_resources, self.batch_size), start=1
-        ):
+        for batch_num, i in enumerate(range(0, total_resources, self.batch_size), start=1):
             batch = resources[i : i + self.batch_size]
             batch_size = len(batch)
 
-            logger.debug(
-                f"Processing batch {batch_num}: {batch_size} {resource_type}(s)"
-            )
+            logger.debug(f"Processing batch {batch_num}: {batch_size} {resource_type}(s)")
 
             if self.batch_size > 1 and batch_size > 1:
                 # Concurrent processing within batch (Requirement 12.3)
-                batch_result = self._process_batch_concurrent(
-                    batch, delete_func, resource_type
-                )
+                batch_result = self._process_batch_concurrent(batch, delete_func, resource_type)
             else:
                 # Sequential processing (batch_size = 1 or single item)
-                batch_result = self._process_batch_sequential(
-                    batch, delete_func, resource_type
-                )
+                batch_result = self._process_batch_sequential(batch, delete_func, resource_type)
 
             # Merge batch results
             result.successful.extend(batch_result.successful)
@@ -137,7 +130,7 @@ class BatchProcessor:
 
     def _process_batch_concurrent(
         self,
-        batch: List[str],
+        batch: list[str],
         delete_func: Callable[[str], bool],
         resource_type: str,
     ) -> BatchResult:
@@ -159,9 +152,7 @@ class BatchProcessor:
         with ThreadPoolExecutor(max_workers=len(batch)) as executor:
             # Submit all deletion tasks
             future_to_resource = {
-                executor.submit(
-                    self._safe_delete, delete_func, resource_id
-                ): resource_id
+                executor.submit(self._safe_delete, delete_func, resource_id): resource_id
                 for resource_id in batch
             }
 
@@ -172,9 +163,7 @@ class BatchProcessor:
                     success, error_msg = future.result()
                     if success:
                         result.successful.append(resource_id)
-                        logger.debug(
-                            f"Successfully deleted {resource_type} {resource_id}"
-                        )
+                        logger.debug(f"Successfully deleted {resource_type} {resource_id}")
                     else:
                         result.failed.append(resource_id)
                         if error_msg:
@@ -187,15 +176,13 @@ class BatchProcessor:
                     # Log failure and continue (Requirement 12.5)
                     result.failed.append(resource_id)
                     result.errors[resource_id] = str(e)
-                    logger.error(
-                        f"Exception deleting {resource_type} {resource_id}: {e}"
-                    )
+                    logger.error(f"Exception deleting {resource_type} {resource_id}: {e}")
 
         return result
 
     def _process_batch_sequential(
         self,
-        batch: List[str],
+        batch: list[str],
         delete_func: Callable[[str], bool],
         resource_type: str,
     ) -> BatchResult:
@@ -223,9 +210,7 @@ class BatchProcessor:
                 if error_msg:
                     result.errors[resource_id] = error_msg
                 # Log failure and continue (Requirement 12.5)
-                logger.warning(
-                    f"Failed to delete {resource_type} {resource_id}: {error_msg}"
-                )
+                logger.warning(f"Failed to delete {resource_type} {resource_id}: {error_msg}")
 
         return result
 
@@ -233,7 +218,7 @@ class BatchProcessor:
         self,
         delete_func: Callable[[str], bool],
         resource_id: str,
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """Safely execute a delete function, catching exceptions.
 
         Args:

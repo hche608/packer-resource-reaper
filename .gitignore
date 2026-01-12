@@ -388,4 +388,5 @@ env.local.json
 
 # Kiro IDE (keep specs for documentation)
 .kiro/settings/
-.kiro/steering/
+
+.vscode/

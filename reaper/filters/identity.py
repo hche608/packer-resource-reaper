@@ -7,8 +7,6 @@ The filter identifies instances launched with KeyPairs matching the pattern
 "packer_*" (Packer_KeyPair).
 """
 
-from typing import List
-
 from reaper.filters.base import ResourceFilter
 from reaper.models import (
     PackerElasticIP,
@@ -35,7 +33,7 @@ class IdentityFilter(ResourceFilter):
     # Pattern for Packer-generated key pairs
     KEY_PAIR_PATTERN = "packer_"
 
-    def __init__(self, key_pattern: str = None):
+    def __init__(self, key_pattern: str | None = None):
         """
         Initialize identity filter.
 
@@ -61,7 +59,7 @@ class IdentityFilter(ResourceFilter):
             return False
         return key_name.startswith(self.key_pattern)
 
-    def filter_instances(self, instances: List[PackerInstance]) -> List[PackerInstance]:
+    def filter_instances(self, instances: list[PackerInstance]) -> list[PackerInstance]:
         """
         Filter instances with Packer key pair pattern.
 
@@ -70,20 +68,20 @@ class IdentityFilter(ResourceFilter):
         return [
             instance
             for instance in instances
-            if self.matches_key_pattern(instance.key_name)
+            if instance.key_name and self.matches_key_pattern(instance.key_name)
         ]
 
-    def filter_volumes(self, volumes: List[PackerVolume]) -> List[PackerVolume]:
+    def filter_volumes(self, volumes: list[PackerVolume]) -> list[PackerVolume]:
         """Filter volumes - pass through (volumes are associated with instances)."""
         return volumes
 
-    def filter_snapshots(self, snapshots: List[PackerSnapshot]) -> List[PackerSnapshot]:
+    def filter_snapshots(self, snapshots: list[PackerSnapshot]) -> list[PackerSnapshot]:
         """Filter snapshots - pass through (snapshots are associated with volumes)."""
         return snapshots
 
     def filter_security_groups(
-        self, security_groups: List[PackerSecurityGroup]
-    ) -> List[PackerSecurityGroup]:
+        self, security_groups: list[PackerSecurityGroup]
+    ) -> list[PackerSecurityGroup]:
         """Filter security groups with Packer pattern.
 
         SAFETY: Only returns security groups with names matching "packer_*".
@@ -91,17 +89,13 @@ class IdentityFilter(ResourceFilter):
         during orphan cleanup (Phase 2).
         """
         return [
-            sg
-            for sg in security_groups
-            if self.matches_key_pattern(getattr(sg, "group_name", ""))
+            sg for sg in security_groups if self.matches_key_pattern(getattr(sg, "group_name", ""))
         ]
 
-    def filter_key_pairs(self, key_pairs: List[PackerKeyPair]) -> List[PackerKeyPair]:
+    def filter_key_pairs(self, key_pairs: list[PackerKeyPair]) -> list[PackerKeyPair]:
         """Filter key pairs with Packer pattern."""
         return [kp for kp in key_pairs if self.matches_key_pattern(kp.key_name)]
 
-    def filter_elastic_ips(
-        self, elastic_ips: List[PackerElasticIP]
-    ) -> List[PackerElasticIP]:
+    def filter_elastic_ips(self, elastic_ips: list[PackerElasticIP]) -> list[PackerElasticIP]:
         """Filter elastic IPs - pass through (associated with instances)."""
         return elastic_ips

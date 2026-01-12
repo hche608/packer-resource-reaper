@@ -14,8 +14,7 @@ Requirements:
        delete, or release API calls
 """
 
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 from hypothesis import given, settings
@@ -39,11 +38,11 @@ from reaper.models import (
 def create_instance(
     instance_id: str,
     state: str = "running",
-    key_name: Optional[str] = None,
-    security_groups: Optional[List[str]] = None,
+    key_name: str | None = None,
+    security_groups: list[str] | None = None,
 ) -> PackerInstance:
     """Helper to create a PackerInstance for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerInstance(
         resource_id=instance_id,
         resource_type=ResourceType.INSTANCE,
@@ -65,7 +64,7 @@ def create_security_group(
     group_name: str = "packer_sg",
 ) -> PackerSecurityGroup:
     """Helper to create a PackerSecurityGroup for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerSecurityGroup(
         resource_id=group_id,
         resource_type=ResourceType.SECURITY_GROUP,
@@ -84,7 +83,7 @@ def create_key_pair(
     key_id: str = "key-test123",
 ) -> PackerKeyPair:
     """Helper to create a PackerKeyPair for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerKeyPair(
         resource_id=key_id,
         resource_type=ResourceType.KEY_PAIR,
@@ -100,10 +99,10 @@ def create_key_pair(
 def create_volume(
     volume_id: str,
     state: str = "available",
-    attached_instance: Optional[str] = None,
+    attached_instance: str | None = None,
 ) -> PackerVolume:
     """Helper to create a PackerVolume for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerVolume(
         resource_id=volume_id,
         resource_type=ResourceType.VOLUME,
@@ -123,7 +122,7 @@ def create_snapshot(
     state: str = "completed",
 ) -> PackerSnapshot:
     """Helper to create a PackerSnapshot for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerSnapshot(
         resource_id=snapshot_id,
         resource_type=ResourceType.SNAPSHOT,
@@ -141,11 +140,11 @@ def create_snapshot(
 def create_elastic_ip(
     allocation_id: str,
     public_ip: str = "1.2.3.4",
-    association_id: Optional[str] = None,
-    instance_id: Optional[str] = None,
+    association_id: str | None = None,
+    instance_id: str | None = None,
 ) -> PackerElasticIP:
     """Helper to create a PackerElasticIP for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerElasticIP(
         resource_id=allocation_id,
         resource_type=ResourceType.ELASTIC_IP,
@@ -237,8 +236,7 @@ def test_dry_run_no_destructive_operations(
     """
     # Create test resources
     instances = [
-        create_instance(instance_id=f"i-{i:08d}", state="running")
-        for i in range(num_instances)
+        create_instance(instance_id=f"i-{i:08d}", state="running") for i in range(num_instances)
     ]
     security_groups = [
         create_security_group(group_id=f"sg-{i:08d}", group_name=f"packer_sg_{i}")
@@ -249,8 +247,7 @@ def test_dry_run_no_destructive_operations(
         for i in range(num_key_pairs)
     ]
     volumes = [
-        create_volume(volume_id=f"vol-{i:08d}", state="available")
-        for i in range(num_volumes)
+        create_volume(volume_id=f"vol-{i:08d}", state="available") for i in range(num_volumes)
     ]
     snapshots = [
         create_snapshot(snapshot_id=f"snap-{i:08d}", state="completed")
@@ -322,8 +319,7 @@ def test_dry_run_identifies_all_cleanup_candidates(
     """
     # Create test resources
     instances = [
-        create_instance(instance_id=f"i-{i:08d}", state="running")
-        for i in range(num_instances)
+        create_instance(instance_id=f"i-{i:08d}", state="running") for i in range(num_instances)
     ]
     security_groups = [
         create_security_group(group_id=f"sg-{i:08d}", group_name=f"packer_sg_{i}")
@@ -334,8 +330,7 @@ def test_dry_run_identifies_all_cleanup_candidates(
         for i in range(num_key_pairs)
     ]
     volumes = [
-        create_volume(volume_id=f"vol-{i:08d}", state="available")
-        for i in range(num_volumes)
+        create_volume(volume_id=f"vol-{i:08d}", state="available") for i in range(num_volumes)
     ]
     snapshots = [
         create_snapshot(snapshot_id=f"snap-{i:08d}", state="completed")
@@ -368,24 +363,24 @@ def test_dry_run_identifies_all_cleanup_candidates(
     assert result.dry_run is True, "Result should indicate dry-run mode"
 
     # Verify all resources are identified as "would be cleaned"
-    assert (
-        len(result.terminated_instances) == num_instances
-    ), f"Expected {num_instances} instances identified, got {len(result.terminated_instances)}"
-    assert (
-        len(result.deleted_security_groups) == num_security_groups
-    ), f"Expected {num_security_groups} SGs identified, got {len(result.deleted_security_groups)}"
-    assert (
-        len(result.deleted_key_pairs) == num_key_pairs
-    ), f"Expected {num_key_pairs} key pairs identified, got {len(result.deleted_key_pairs)}"
-    assert (
-        len(result.deleted_volumes) == num_volumes
-    ), f"Expected {num_volumes} volumes identified, got {len(result.deleted_volumes)}"
-    assert (
-        len(result.deleted_snapshots) == num_snapshots
-    ), f"Expected {num_snapshots} snapshots identified, got {len(result.deleted_snapshots)}"
-    assert (
-        len(result.released_elastic_ips) == num_elastic_ips
-    ), f"Expected {num_elastic_ips} EIPs identified, got {len(result.released_elastic_ips)}"
+    assert len(result.terminated_instances) == num_instances, (
+        f"Expected {num_instances} instances identified, got {len(result.terminated_instances)}"
+    )
+    assert len(result.deleted_security_groups) == num_security_groups, (
+        f"Expected {num_security_groups} SGs identified, got {len(result.deleted_security_groups)}"
+    )
+    assert len(result.deleted_key_pairs) == num_key_pairs, (
+        f"Expected {num_key_pairs} key pairs identified, got {len(result.deleted_key_pairs)}"
+    )
+    assert len(result.deleted_volumes) == num_volumes, (
+        f"Expected {num_volumes} volumes identified, got {len(result.deleted_volumes)}"
+    )
+    assert len(result.deleted_snapshots) == num_snapshots, (
+        f"Expected {num_snapshots} snapshots identified, got {len(result.deleted_snapshots)}"
+    )
+    assert len(result.released_elastic_ips) == num_elastic_ips, (
+        f"Expected {num_elastic_ips} EIPs identified, got {len(result.released_elastic_ips)}"
+    )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -409,16 +404,14 @@ def test_dry_run_result_matches_live_identification(
     """
     # Create test resources
     instances = [
-        create_instance(instance_id=f"i-{i:08d}", state="running")
-        for i in range(num_instances)
+        create_instance(instance_id=f"i-{i:08d}", state="running") for i in range(num_instances)
     ]
     security_groups = [
         create_security_group(group_id=f"sg-{i:08d}", group_name=f"packer_sg_{i}")
         for i in range(num_security_groups)
     ]
     volumes = [
-        create_volume(volume_id=f"vol-{i:08d}", state="available")
-        for i in range(num_volumes)
+        create_volume(volume_id=f"vol-{i:08d}", state="available") for i in range(num_volumes)
     ]
 
     resources = ResourceCollection(
@@ -438,33 +431,29 @@ def test_dry_run_result_matches_live_identification(
     live_result = live_engine.cleanup_resources(resources)
 
     # Verify dry-run identifies the same resources as live mode
-    assert set(dry_run_result.terminated_instances) == set(
-        live_result.terminated_instances
-    ), "Dry-run should identify same instances as live mode"
+    assert set(dry_run_result.terminated_instances) == set(live_result.terminated_instances), (
+        "Dry-run should identify same instances as live mode"
+    )
     assert set(dry_run_result.deleted_security_groups) == set(
         live_result.deleted_security_groups
     ), "Dry-run should identify same security groups as live mode"
-    assert set(dry_run_result.deleted_volumes) == set(
-        live_result.deleted_volumes
-    ), "Dry-run should identify same volumes as live mode"
+    assert set(dry_run_result.deleted_volumes) == set(live_result.deleted_volumes), (
+        "Dry-run should identify same volumes as live mode"
+    )
 
     # But dry-run should NOT have made any destructive calls
-    assert (
-        len(dry_run_client.destructive_calls) == 0
-    ), "Dry-run should not make destructive calls"
+    assert len(dry_run_client.destructive_calls) == 0, "Dry-run should not make destructive calls"
     # Live mode SHOULD have made destructive calls (if there were resources)
     if num_instances > 0 or num_security_groups > 0 or num_volumes > 0:
-        assert (
-            len(live_client.destructive_calls) > 0
-        ), "Live mode should make destructive calls when resources exist"
+        assert len(live_client.destructive_calls) > 0, (
+            "Live mode should make destructive calls when resources exist"
+        )
 
 
 @settings(max_examples=100, deadline=10000)
 @given(
     num_instances=st.integers(min_value=1, max_value=5),
-    instance_state=st.sampled_from(
-        ["running", "stopped", "pending", "stopping", "rebooting"]
-    ),
+    instance_state=st.sampled_from(["running", "stopped", "pending", "stopping", "rebooting"]),
 )
 def test_dry_run_handles_all_instance_states(
     num_instances: int,
@@ -491,9 +480,9 @@ def test_dry_run_handles_all_instance_states(
     engine.cleanup_resources(resources)
 
     # No destructive calls should be made regardless of instance state
-    assert (
-        len(mock_client.destructive_calls) == 0
-    ), f"Dry-run should not terminate instances in {instance_state} state"
+    assert len(mock_client.destructive_calls) == 0, (
+        f"Dry-run should not terminate instances in {instance_state} state"
+    )
     mock_client.terminate_instances.assert_not_called()
 
 
@@ -511,9 +500,7 @@ def test_dry_run_total_cleaned_count_accurate(num_resources: int):
     Validates: Requirements 9.2, 9.3
     """
     # Create a mix of resources
-    instances = [
-        create_instance(instance_id=f"i-{i:08d}") for i in range(num_resources)
-    ]
+    instances = [create_instance(instance_id=f"i-{i:08d}") for i in range(num_resources)]
     volumes = [create_volume(volume_id=f"vol-{i:08d}") for i in range(num_resources)]
 
     resources = ResourceCollection(
@@ -528,9 +515,9 @@ def test_dry_run_total_cleaned_count_accurate(num_resources: int):
 
     # Total cleaned should equal all resources
     expected_total = num_resources * 2  # instances + volumes
-    assert (
-        result.total_cleaned() == expected_total
-    ), f"Expected total_cleaned={expected_total}, got {result.total_cleaned()}"
+    assert result.total_cleaned() == expected_total, (
+        f"Expected total_cleaned={expected_total}, got {result.total_cleaned()}"
+    )
 
     # But no actual API calls
     assert len(mock_client.destructive_calls) == 0
@@ -561,21 +548,16 @@ def test_dry_run_no_errors_without_api_calls(
 
     Validates: Requirements 9.1, 9.4
     """
-    instances = [
-        create_instance(instance_id=f"i-{i:08d}") for i in range(num_instances)
-    ]
+    instances = [create_instance(instance_id=f"i-{i:08d}") for i in range(num_instances)]
     security_groups = [
-        create_security_group(group_id=f"sg-{i:08d}")
-        for i in range(num_security_groups)
+        create_security_group(group_id=f"sg-{i:08d}") for i in range(num_security_groups)
     ]
     key_pairs = [
         create_key_pair(key_name=f"packer_key_{i}", key_id=f"key-{i:08d}")
         for i in range(num_key_pairs)
     ]
     volumes = [create_volume(volume_id=f"vol-{i:08d}") for i in range(num_volumes)]
-    snapshots = [
-        create_snapshot(snapshot_id=f"snap-{i:08d}") for i in range(num_snapshots)
-    ]
+    snapshots = [create_snapshot(snapshot_id=f"snap-{i:08d}") for i in range(num_snapshots)]
     elastic_ips = [
         create_elastic_ip(allocation_id=f"eipalloc-{i:08d}", public_ip=f"1.2.3.{i}")
         for i in range(num_elastic_ips)
@@ -596,13 +578,11 @@ def test_dry_run_no_errors_without_api_calls(
     result = engine.cleanup_resources(resources)
 
     # No errors should occur in dry-run mode
-    assert (
-        len(result.errors) == 0
-    ), f"Dry-run should not produce errors, but got: {result.errors}"
+    assert len(result.errors) == 0, f"Dry-run should not produce errors, but got: {result.errors}"
     # No deferred resources either (since no actual operations)
-    assert (
-        len(result.deferred_resources) == 0
-    ), f"Dry-run should not defer resources, but got: {result.deferred_resources}"
+    assert len(result.deferred_resources) == 0, (
+        f"Dry-run should not defer resources, but got: {result.deferred_resources}"
+    )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -632,8 +612,7 @@ def test_dry_run_executor_generates_complete_report(
     """
     # Create test resources
     instances = [
-        create_instance(instance_id=f"i-{i:08d}", state="running")
-        for i in range(num_instances)
+        create_instance(instance_id=f"i-{i:08d}", state="running") for i in range(num_instances)
     ]
     security_groups = [
         create_security_group(group_id=f"sg-{i:08d}", group_name=f"packer_sg_{i}")
@@ -644,8 +623,7 @@ def test_dry_run_executor_generates_complete_report(
         for i in range(num_key_pairs)
     ]
     volumes = [
-        create_volume(volume_id=f"vol-{i:08d}", state="available")
-        for i in range(num_volumes)
+        create_volume(volume_id=f"vol-{i:08d}", state="available") for i in range(num_volumes)
     ]
     snapshots = [
         create_snapshot(snapshot_id=f"snap-{i:08d}", state="completed")
@@ -792,8 +770,7 @@ def test_dry_run_engine_stores_report_for_sns(
     """
     # Create test resources
     instances = [
-        create_instance(instance_id=f"i-{i:08d}", state="running")
-        for i in range(num_instances)
+        create_instance(instance_id=f"i-{i:08d}", state="running") for i in range(num_instances)
     ]
     security_groups = [
         create_security_group(group_id=f"sg-{i:08d}", group_name=f"packer_sg_{i}")
@@ -804,8 +781,7 @@ def test_dry_run_engine_stores_report_for_sns(
         for i in range(num_key_pairs)
     ]
     volumes = [
-        create_volume(volume_id=f"vol-{i:08d}", state="available")
-        for i in range(num_volumes)
+        create_volume(volume_id=f"vol-{i:08d}", state="available") for i in range(num_volumes)
     ]
     snapshots = [
         create_snapshot(snapshot_id=f"snap-{i:08d}", state="completed")
@@ -878,12 +854,10 @@ def test_dry_run_empty_resources_no_errors(
     Validates: Requirements 9.1, 9.4
     """
     instances = [
-        create_instance(instance_id=f"i-{i:08d}", state="running")
-        for i in range(num_instances)
+        create_instance(instance_id=f"i-{i:08d}", state="running") for i in range(num_instances)
     ]
     volumes = [
-        create_volume(volume_id=f"vol-{i:08d}", state="available")
-        for i in range(num_volumes)
+        create_volume(volume_id=f"vol-{i:08d}", state="available") for i in range(num_volumes)
     ]
 
     resources = ResourceCollection(

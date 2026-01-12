@@ -12,6 +12,7 @@ The AWS Packer Resource Reaper is a serverless application built on AWS Lambda t
 - **Single Account/Region Scope**: The system operates strictly within the AWS account and region where it is deployed, using default Lambda execution environment credentials.
 - **Two-Phase Cleanup Model**: The system performs cleanup in two phases: (1) Primary cleanup of zombie instances and their directly associated resources, followed by (2) Orphaned resource cleanup for Packer-created resources that persist without any instance association. This sequencing is vital — if both ran simultaneously, the orphan scanner might identify a Security Group as "orphaned" because its instance is currently terminating but not yet gone.
 - **ThreadPoolExecutor for Concurrency**: The batch processor uses `ThreadPoolExecutor` (not `asyncio`) because boto3 is synchronous. Using `asyncio.gather` with blocking boto3 calls would execute sequentially, defeating the purpose of concurrent processing.
+- **Age-Based Filtering for Orphaned Resources**: Orphaned key pairs and IAM roles must be older than a configurable threshold (default: 2 hours) before deletion. This prevents a critical race condition where resources created by an active Packer build could be deleted before provisioning completes.
 
 ## Architecture
 
@@ -23,17 +24,17 @@ graph TB
     LF --> EC2[EC2 API]
     LF --> CW[CloudWatch Logs]
     LF --> SNS[SNS Topic]
-    
+
     EC2 --> |Scan| INST[EC2 Instances]
     EC2 --> |Cleanup| SG[Security Groups]
     EC2 --> |Cleanup| KP[Key Pairs]
     EC2 --> |Cleanup| EBS[EBS Volumes]
     EC2 --> |Cleanup| EIP[Elastic IPs]
-    
+
     LF --> IAM[IAM API]
     IAM --> |Cleanup| IIP[Instance Profiles]
     IAM --> |Cleanup| ROLES[IAM Roles]
-    
+
     subgraph "Phase 1: Zombie Instance Cleanup"
         INST
         SG
@@ -42,13 +43,13 @@ graph TB
         EIP
         IIP
     end
-    
+
     subgraph "Phase 2: Orphaned Resource Cleanup"
         OKP[Orphaned Key Pairs]
         OSG[Orphaned Security Groups]
         OROLES[Orphaned IAM Roles]
     end
-    
+
     SNS --> EMAIL[Email Notifications]
 ```
 
@@ -107,12 +108,12 @@ from reaper.models import PackerInstance
 
 class ResourceFilter(ABC):
     """Base interface for resource filters"""
-    
+
     @abstractmethod
     def filter_instances(self, instances: List[PackerInstance]) -> List[PackerInstance]:
         """Filter EC2 instances based on specific criteria"""
         pass
-    
+
     @abstractmethod
     def matches(self, instance: PackerInstance) -> bool:
         """Check if a single instance matches the filter criteria"""
@@ -121,9 +122,9 @@ class ResourceFilter(ABC):
 
 class IdentityFilter(ResourceFilter):
     """Filter instances by SSH key pair pattern"""
-    
+
     KEY_PAIR_PATTERN = "packer_"
-    
+
     def matches(self, instance: PackerInstance) -> bool:
         """Instance matches if key_name starts with 'packer_'"""
         if not instance.key_name:
@@ -133,10 +134,10 @@ class IdentityFilter(ResourceFilter):
 
 class TemporalFilter(ResourceFilter):
     """Filter instances by age threshold"""
-    
+
     def __init__(self, max_age_hours: int):
         self.max_age_hours = max_age_hours
-    
+
     def matches(self, instance: PackerInstance) -> bool:
         """Instance matches if age exceeds threshold"""
         return instance.age_hours > self.max_age_hours
@@ -176,7 +177,7 @@ class CleanupEngine:
     def __init__(self, dry_run: bool = False, batch_delete_size: int = 1):
         self.dry_run = dry_run
         self.batch_delete_size = batch_delete_size
-    
+
     def cleanup_resources(self, zombie_instances: List[PackerInstance]) -> CleanupResult:
         """
         Execute cleanup in dependency-aware order:
@@ -185,7 +186,7 @@ class CleanupEngine:
         2. Collect directly associated resources
         3. Terminate instances and wait for confirmation
         4. Delete associated resources (using batch processing if configured)
-        
+
         Phase 2 - Orphaned Resource Cleanup:
         5. Scan for orphaned Packer key pairs (not used by any instance)
         6. Scan for orphaned Packer security groups (no attachments)
@@ -193,16 +194,16 @@ class CleanupEngine:
         8. Delete orphaned resources (using batch processing if configured)
         """
         pass
-    
+
     def _delete_resources_in_batches(self, resources: List[str], delete_func) -> List[str]:
         """
         Process resource deletions in configurable batches.
-        
+
         When batch_delete_size > 1, deletions within each batch are processed
         concurrently using ThreadPoolExecutor (NOT asyncio, since boto3 is synchronous).
-        The engine waits for all deletions in the current batch to complete 
+        The engine waits for all deletions in the current batch to complete
         before proceeding to the next batch.
-        
+
         Failures within a batch are logged but don't stop processing of
         remaining items in the batch or subsequent batches.
         """
@@ -211,31 +212,32 @@ class CleanupEngine:
 
 class OrphanManager:
     """Manager for identifying and cleaning up orphaned Packer resources"""
-    
-    def __init__(self, dry_run: bool = False):
+
+    def __init__(self, dry_run: bool = False, max_resource_age_hours: int = 2):
         self.dry_run = dry_run
-    
+        self.max_resource_age_hours = max(1, max_resource_age_hours)  # Minimum 1 hour
+
     def scan_orphaned_key_pairs(self) -> List[str]:
         """
-        Identify key pairs starting with 'packer_' that are not 
+        Identify key pairs starting with 'packer_' that are not
         associated with any running or pending EC2 instances.
         """
         pass
-    
+
     def scan_orphaned_security_groups(self) -> List[str]:
         """
         Identify security groups with names or descriptions containing 'packer'
         that are not attached to any EC2 instances or network interfaces.
         """
         pass
-    
+
     def scan_orphaned_iam_roles(self) -> List[str]:
         """
-        Identify IAM roles starting with 'packer_' that are not 
+        Identify IAM roles starting with 'packer_' that are not
         attached to any EC2 instance profiles in use.
         """
         pass
-    
+
     def cleanup_orphaned_resources(self, orphaned: OrphanedResources) -> dict:
         """
         Delete orphaned resources after confirming no dependencies exist.
@@ -264,7 +266,7 @@ class PackerInstance:
     key_name: Optional[str]
     security_groups: List[str] = field(default_factory=list)
     iam_instance_profile: Optional[str] = None
-    
+
     @property
     def age_hours(self) -> float:
         """Calculate instance age in hours"""
@@ -305,22 +307,22 @@ class ReaperConfig:
     notification_topic_arn: str = ""
     log_level: str = "INFO"
     batch_delete_size: int = 1
-    
+
     # Filter configuration
     key_pair_pattern: str = "packer_"
-    
+
     @classmethod
     def from_environment(cls) -> 'ReaperConfig':
         """Load configuration from environment variables"""
         import os
-        
+
         # Parse and validate LOG_LEVEL
         log_level = os.environ.get('LOG_LEVEL', 'INFO').upper()
         valid_levels = {'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'}
         if log_level not in valid_levels:
             logging.warning(f"Invalid LOG_LEVEL '{log_level}', defaulting to INFO")
             log_level = 'INFO'
-        
+
         # Parse and validate BATCH_DELETE_SIZE
         try:
             batch_size = int(os.environ.get('BATCH_DELETE_SIZE', '1'))
@@ -330,7 +332,7 @@ class ReaperConfig:
         except ValueError:
             logging.warning(f"Invalid BATCH_DELETE_SIZE, defaulting to 1")
             batch_size = 1
-        
+
         return cls(
             max_instance_age_hours=int(os.environ.get('MAX_INSTANCE_AGE_HOURS', '2')),
             dry_run=os.environ.get('DRY_RUN', 'false').lower() == 'true',
@@ -354,37 +356,37 @@ sequenceDiagram
     participant EC2 as EC2 API
     participant IAM as IAM API
     participant SNS as SNS Topic
-    
+
     Note over R,SNS: Phase 1: Zombie Instance Cleanup
     R->>EC2: 1. Scan instances with key_name starting with "packer_"
     EC2-->>R: List of instances
-    
+
     R->>R: 2. Filter by age > MaxInstanceAge
-    
+
     R->>EC2: 3. Collect associated resources for each zombie
     EC2-->>R: Security groups, key pairs, volumes, EIPs
-    
+
     R->>EC2: 4. Terminate instances
     R->>EC2: Wait for termination confirmation
     EC2-->>R: Instances terminated
-    
+
     R->>EC2: 5. Delete associated resources
     Note over R,EC2: Handle DependencyViolation gracefully
-    
+
     Note over R,SNS: Phase 2: Orphaned Resource Cleanup
     R->>EC2: 6. Scan for orphaned key pairs (packer_* not used by any instance)
     EC2-->>R: List of orphaned key pairs
-    
+
     R->>EC2: 7. Scan for orphaned security groups (packer in name/desc, no attachments)
     EC2-->>R: List of orphaned security groups
-    
+
     R->>IAM: 8. Scan for orphaned IAM roles (packer_* not in any instance profile)
     IAM-->>R: List of orphaned IAM roles
-    
+
     R->>EC2: 9. Delete orphaned key pairs
     R->>EC2: 10. Delete orphaned security groups
     R->>IAM: 11. Detach policies and delete orphaned IAM roles
-    
+
     R->>SNS: Send cleanup notification (includes orphaned resources)
 ```
 
@@ -392,6 +394,58 @@ sequenceDiagram
 - Phase 1 handles zombie instances and their directly associated resources, ensuring proper dependency ordering
 - Phase 2 runs after primary cleanup completes, catching resources that may have been orphaned by previous failed builds or partial cleanups
 - This separation ensures orphaned resources don't interfere with active instance cleanup and provides clear audit trails
+
+## Safety: Age-Based Filtering for Orphaned Resources
+
+### The Race Condition Problem
+
+When Packer starts a build, it creates resources (key pairs, IAM roles) before launching the EC2 instance. During this provisioning window, these resources exist without any associated instance. Without age-based filtering, the orphan scanner could incorrectly identify these newly-created resources as "orphaned" and delete them, causing the active Packer build to fail.
+
+**Timeline of a Packer Build:**
+```
+T+0s:   Packer creates key pair "packer_abc123"
+T+1s:   Packer creates IAM role "packer_role_xyz"
+T+5s:   Packer launches EC2 instance with key pair and IAM role
+T+30s:  Instance enters "running" state
+...
+T+10m:  Packer completes provisioning
+T+11m:  Packer terminates instance and cleans up resources
+```
+
+If the reaper runs between T+0s and T+5s, it would see the key pair and IAM role as "orphaned" (no instance using them) and delete them, breaking the build.
+
+### The Solution: Age Threshold
+
+The `OrphanManager` implements age-based filtering to prevent this race condition:
+
+```python
+class OrphanManager:
+    def __init__(self, ..., max_resource_age_hours: int = 2):
+        self.max_resource_age_hours = max(1, max_resource_age_hours)  # Minimum 1 hour
+
+    def _get_packer_key_pairs(self) -> List[str]:
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=self.max_resource_age_hours)
+        for kp in key_pairs:
+            create_time = kp.get("CreateTime")
+            if create_time and create_time > cutoff_time:
+                logger.debug(f"Skipping key pair {key_name}: too young")
+                continue  # Skip young resources
+            # ... process old resources
+
+    def _get_packer_iam_roles(self) -> List[str]:
+        # Same age-based filtering for IAM roles
+```
+
+**Configuration:**
+- Default: 2 hours (sufficient for most Packer builds)
+- Minimum: 1 hour (enforced in code)
+- Configurable via `max_resource_age_hours` parameter passed to `CleanupEngine`
+
+**Safety Guarantees:**
+1. Key pairs younger than the threshold are never considered for orphan cleanup
+2. IAM roles younger than the threshold are never considered for orphan cleanup
+3. Resources are logged as "skipped: too young" at DEBUG level for auditability
+4. The minimum 1-hour threshold prevents misconfiguration from causing immediate deletion
 
 ## Error Handling
 
@@ -409,12 +463,12 @@ sequenceDiagram
 ```python
 class RetryStrategy:
     """Exponential backoff with jitter for AWS API calls"""
-    
+
     def __init__(self):
         self.max_retries = 3
         self.base_delay = 1.0
         self.max_delay = 60.0
-    
+
     def execute_with_retry(self, operation, *args, **kwargs):
         for attempt in range(self.max_retries + 1):
             try:
@@ -454,21 +508,21 @@ def configure_logging() -> logging.Logger:
     """Configure logging based on LOG_LEVEL environment variable"""
     log_level = os.environ.get('LOG_LEVEL', 'INFO').upper()
     valid_levels = {'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'}
-    
+
     if log_level not in valid_levels:
         # Default to INFO and log warning about invalid level
         logging.warning(f"Invalid LOG_LEVEL '{log_level}', defaulting to INFO")
         log_level = 'INFO'
-    
+
     logging.basicConfig(
         level=getattr(logging, log_level),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
-    
+
     return logging.getLogger('reaper')
 ```
 
-**Design Rationale**: 
+**Design Rationale**:
 - Defaulting to INFO provides sufficient operational visibility without excessive log volume
 - Invalid values gracefully fall back to INFO with a warning, ensuring the system remains operational
 - DEBUG level is available for troubleshooting without code changes
@@ -484,16 +538,16 @@ sequenceDiagram
     participant CE as Cleanup Engine
     participant BP as Batch Processor
     participant AWS as AWS API
-    
+
     CE->>BP: Submit resources for deletion
-    
+
     loop For each batch of BATCH_DELETE_SIZE
         BP->>AWS: Concurrent delete requests (within batch)
         AWS-->>BP: Results (success/failure per resource)
         BP->>BP: Log failures, continue processing
         BP->>BP: Wait for batch completion
     end
-    
+
     BP-->>CE: Aggregated results
 ```
 
@@ -508,41 +562,41 @@ import logging
 
 class BatchProcessor:
     """Process resource deletions in configurable batches using ThreadPoolExecutor.
-    
+
     Uses ThreadPoolExecutor instead of asyncio because boto3 is synchronous (blocking).
     asyncio.gather with blocking I/O would execute sequentially, not concurrently.
     ThreadPoolExecutor provides true concurrent execution for blocking boto3 calls.
     """
-    
+
     def __init__(self, batch_size: int = 1):
         self.batch_size = max(1, batch_size)  # Ensure minimum of 1
         self.logger = logging.getLogger('reaper.batch')
-    
+
     def process_deletions(
-        self, 
-        resources: List[str], 
+        self,
+        resources: List[str],
         delete_func: Callable[[str], bool],
         resource_type: str = "resource"
     ) -> Tuple[List[str], List[str], dict]:
         """
         Process deletions in batches with concurrent execution within each batch.
-        
+
         Args:
             resources: List of resource identifiers to delete
             delete_func: Function to delete a single resource (returns True on success)
             resource_type: Human-readable resource type for logging
-            
+
         Returns:
             Tuple of (successful_deletions, failed_deletions, errors_dict)
         """
         successful = []
         failed = []
         errors = {}
-        
+
         # Process in batches
         for i in range(0, len(resources), self.batch_size):
             batch = resources[i:i + self.batch_size]
-            
+
             if self.batch_size > 1 and len(batch) > 1:
                 # Concurrent processing within batch using ThreadPoolExecutor
                 with ThreadPoolExecutor(max_workers=len(batch)) as executor:
@@ -550,7 +604,7 @@ class BatchProcessor:
                         executor.submit(self._safe_delete, delete_func, resource): resource
                         for resource in batch
                     }
-                    
+
                     # Wait for all tasks to complete
                     for future in as_completed(future_to_resource):
                         resource = future_to_resource[future]
@@ -578,9 +632,9 @@ class BatchProcessor:
                         if error_msg:
                             errors[resource] = error_msg
                         self.logger.warning(f"Failed to delete {resource_type} {resource}: {error_msg}")
-        
+
         return successful, failed, errors
-    
+
     def _safe_delete(self, delete_func: Callable[[str], bool], resource_id: str) -> Tuple[bool, Optional[str]]:
         """Safely execute delete function, catching exceptions."""
         try:

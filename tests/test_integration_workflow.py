@@ -6,8 +6,7 @@ and error propagation and recovery.
 Task: 10.3 Write integration tests for complete workflow
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 from reaper.cleanup.engine import CleanupEngine
@@ -38,13 +37,13 @@ def create_packer_instance(
     state: str = "running",
     age_hours: float = 3.0,
     vpc_id: str = "vpc-12345678",
-    key_name: Optional[str] = "packer_key_test",
-    security_groups: Optional[List[str]] = None,
-    tags: Optional[Dict[str, str]] = None,
+    key_name: str | None = "packer_key_test",
+    security_groups: list[str] | None = None,
+    tags: dict[str, str] | None = None,
     include_packer_tags: bool = True,
 ) -> PackerInstance:
     """Create a PackerInstance for testing."""
-    launch_time = datetime.now(timezone.utc) - timedelta(hours=age_hours)
+    launch_time = datetime.now(UTC) - timedelta(hours=age_hours)
     if include_packer_tags:
         default_tags = {"Name": "Packer Builder", "packer": "true"}
     else:
@@ -72,10 +71,10 @@ def create_packer_security_group(
     group_id: str,
     group_name: str = "packer_sg_test",
     vpc_id: str = "vpc-12345678",
-    tags: Optional[Dict[str, str]] = None,
+    tags: dict[str, str] | None = None,
 ) -> PackerSecurityGroup:
     """Create a PackerSecurityGroup for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerSecurityGroup(
         resource_id=group_id,
         resource_type=ResourceType.SECURITY_GROUP,
@@ -92,10 +91,10 @@ def create_packer_security_group(
 def create_packer_key_pair(
     key_name: str,
     key_id: str = "key-test123",
-    tags: Optional[Dict[str, str]] = None,
+    tags: dict[str, str] | None = None,
 ) -> PackerKeyPair:
     """Create a PackerKeyPair for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerKeyPair(
         resource_id=key_id,
         resource_type=ResourceType.KEY_PAIR,
@@ -112,11 +111,11 @@ def create_packer_volume(
     volume_id: str,
     state: str = "available",
     age_hours: float = 3.0,
-    attached_instance: Optional[str] = None,
-    tags: Optional[Dict[str, str]] = None,
+    attached_instance: str | None = None,
+    tags: dict[str, str] | None = None,
 ) -> PackerVolume:
     """Create a PackerVolume for testing."""
-    creation_time = datetime.now(timezone.utc) - timedelta(hours=age_hours)
+    creation_time = datetime.now(UTC) - timedelta(hours=age_hours)
     default_tags = {"Name": "Packer Volume", "packer": "true"}
     if tags:
         default_tags.update(tags)
@@ -139,10 +138,10 @@ def create_packer_snapshot(
     snapshot_id: str,
     state: str = "completed",
     age_hours: float = 3.0,
-    tags: Optional[Dict[str, str]] = None,
+    tags: dict[str, str] | None = None,
 ) -> PackerSnapshot:
     """Create a PackerSnapshot for testing."""
-    creation_time = datetime.now(timezone.utc) - timedelta(hours=age_hours)
+    creation_time = datetime.now(UTC) - timedelta(hours=age_hours)
     default_tags = {"Name": "Packer Snapshot", "packer": "true"}
     if tags:
         default_tags.update(tags)
@@ -164,12 +163,12 @@ def create_packer_snapshot(
 def create_packer_elastic_ip(
     allocation_id: str,
     public_ip: str = "1.2.3.4",
-    association_id: Optional[str] = None,
-    instance_id: Optional[str] = None,
-    tags: Optional[Dict[str, str]] = None,
+    association_id: str | None = None,
+    instance_id: str | None = None,
+    tags: dict[str, str] | None = None,
 ) -> PackerElasticIP:
     """Create a PackerElasticIP for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     default_tags = {"Name": "packer_eip", "packer": "true"}
     if tags:
         default_tags.update(tags)
@@ -194,8 +193,8 @@ def create_packer_elastic_ip(
 
 
 def create_mock_ec2_client(
-    dependency_violations: Optional[List[str]] = None,
-    permanent_errors: Optional[List[str]] = None,
+    dependency_violations: list[str] | None = None,
+    permanent_errors: list[str] | None = None,
 ) -> MagicMock:
     """Create a mock EC2 client that tracks operations."""
     mock_client = MagicMock()
@@ -220,9 +219,7 @@ def create_mock_ec2_client(
                     },
                     "TerminateInstances",
                 )
-            results.append(
-                {"InstanceId": iid, "CurrentState": {"Name": "shutting-down"}}
-            )
+            results.append({"InstanceId": iid, "CurrentState": {"Name": "shutting-down"}})
         return {"TerminatingInstances": results}
 
     def delete_security_group(GroupId):
@@ -430,12 +427,8 @@ class TestEndToEndCleanupScenarios:
 
         # Verify operation order: instances before SG
         ops = mock_client.operations
-        terminate_idx = next(
-            i for i, (op, _) in enumerate(ops) if op == "terminate_instances"
-        )
-        sg_delete_idx = next(
-            i for i, (op, _) in enumerate(ops) if op == "delete_security_group"
-        )
+        terminate_idx = next(i for i, (op, _) in enumerate(ops) if op == "terminate_instances")
+        sg_delete_idx = next(i for i, (op, _) in enumerate(ops) if op == "delete_security_group")
         assert terminate_idx < sg_delete_idx
 
     def test_cleanup_with_all_resource_types(self):
@@ -510,9 +503,7 @@ class TestCrossComponentInteractions:
         temporal_filter = TemporalFilter(max_age_hours=2)
         identity_filter = IdentityFilter()
 
-        filtered_instances = apply_two_criteria_filter(
-            instances, temporal_filter, identity_filter
-        )
+        filtered_instances = apply_two_criteria_filter(instances, temporal_filter, identity_filter)
 
         # Only the first instance should pass both filters
         assert len(filtered_instances) == 1
@@ -691,9 +682,7 @@ class TestErrorPropagationAndRecovery:
         """
         resources = ResourceCollection(
             volumes=[
-                create_packer_volume(
-                    "vol-available001", state="available", age_hours=3.0
-                ),
+                create_packer_volume("vol-available001", state="available", age_hours=3.0),
                 create_packer_volume("vol-inuse001", state="in-use", age_hours=3.0),
             ],
         )
@@ -784,9 +773,7 @@ class TestFilterCleanupPipeline:
         temporal_filter = TemporalFilter(max_age_hours=2)
         identity_filter = IdentityFilter()
 
-        filtered_instances = apply_two_criteria_filter(
-            instances, temporal_filter, identity_filter
-        )
+        filtered_instances = apply_two_criteria_filter(instances, temporal_filter, identity_filter)
 
         # Only packer instance should pass
         assert len(filtered_instances) == 1
@@ -825,9 +812,7 @@ class TestFilterCleanupPipeline:
         temporal_filter = TemporalFilter(max_age_hours=2)
         identity_filter = IdentityFilter()
 
-        filtered_instances = apply_two_criteria_filter(
-            instances, temporal_filter, identity_filter
-        )
+        filtered_instances = apply_two_criteria_filter(instances, temporal_filter, identity_filter)
 
         # Only old instance should pass
         assert len(filtered_instances) == 1
@@ -856,9 +841,7 @@ class TestFilterCleanupPipeline:
         temporal_filter = TemporalFilter(max_age_hours=2)
         identity_filter = IdentityFilter()
 
-        filtered_instances = apply_two_criteria_filter(
-            instances, temporal_filter, identity_filter
-        )
+        filtered_instances = apply_two_criteria_filter(instances, temporal_filter, identity_filter)
 
         # Only Packer instance should pass
         assert len(filtered_instances) == 1
@@ -880,7 +863,7 @@ class TestFilterCleanupPipeline:
         other_region_instance = PackerInstance(
             resource_id="i-other-region",
             resource_type=ResourceType.INSTANCE,
-            creation_time=datetime.now(timezone.utc) - timedelta(hours=3),
+            creation_time=datetime.now(UTC) - timedelta(hours=3),
             tags={"Name": "Packer Builder"},
             region="eu-west-1",  # Different region
             account_id="123456789012",
@@ -889,7 +872,7 @@ class TestFilterCleanupPipeline:
             vpc_id="vpc-12345678",
             security_groups=["sg-12345678"],
             key_name="packer_key_test",
-            launch_time=datetime.now(timezone.utc) - timedelta(hours=3),
+            launch_time=datetime.now(UTC) - timedelta(hours=3),
         )
         instances.append(other_region_instance)
 
@@ -969,9 +952,7 @@ class TestConfigurationIntegration:
         temporal_filter = TemporalFilter(max_age_hours=4)
         identity_filter = IdentityFilter()
 
-        filtered_instances = apply_two_criteria_filter(
-            instances, temporal_filter, identity_filter
-        )
+        filtered_instances = apply_two_criteria_filter(instances, temporal_filter, identity_filter)
 
         # Only 5hr instance should pass (>= 4 hours)
         assert len(filtered_instances) == 1
@@ -979,9 +960,7 @@ class TestConfigurationIntegration:
 
         # With 2 hour threshold
         temporal_filter_2hr = TemporalFilter(max_age_hours=2)
-        filtered_2hr = apply_two_criteria_filter(
-            instances, temporal_filter_2hr, identity_filter
-        )
+        filtered_2hr = apply_two_criteria_filter(instances, temporal_filter_2hr, identity_filter)
 
         # 3hr and 5hr instances should pass (>= 2 hours)
         assert len(filtered_2hr) == 2
@@ -1054,7 +1033,7 @@ class TestLambdaHandlerIntegration:
             PackerInstance(
                 resource_id="i-other-region",
                 resource_type=ResourceType.INSTANCE,
-                creation_time=datetime.now(timezone.utc) - timedelta(hours=3),
+                creation_time=datetime.now(UTC) - timedelta(hours=3),
                 tags={"Name": "Packer Builder"},
                 region="eu-west-1",  # Different region
                 account_id="123456789012",
@@ -1063,13 +1042,13 @@ class TestLambdaHandlerIntegration:
                 vpc_id="vpc-12345678",
                 security_groups=["sg-12345678"],
                 key_name="packer_key_test",
-                launch_time=datetime.now(timezone.utc) - timedelta(hours=3),
+                launch_time=datetime.now(UTC) - timedelta(hours=3),
             ),
             # This instance is from a different account
             PackerInstance(
                 resource_id="i-other-account",
                 resource_type=ResourceType.INSTANCE,
-                creation_time=datetime.now(timezone.utc) - timedelta(hours=3),
+                creation_time=datetime.now(UTC) - timedelta(hours=3),
                 tags={"Name": "Packer Builder"},
                 region="us-east-1",
                 account_id="999999999999",  # Different account
@@ -1078,7 +1057,7 @@ class TestLambdaHandlerIntegration:
                 vpc_id="vpc-12345678",
                 security_groups=["sg-12345678"],
                 key_name="packer_key_test",
-                launch_time=datetime.now(timezone.utc) - timedelta(hours=3),
+                launch_time=datetime.now(UTC) - timedelta(hours=3),
             ),
         ]
 
@@ -1126,9 +1105,7 @@ class TestLambdaHandlerIntegration:
         temporal_filter = TemporalFilter(max_age_hours=2)
         identity_filter = IdentityFilter()
 
-        filtered_instances = apply_two_criteria_filter(
-            instances, temporal_filter, identity_filter
-        )
+        filtered_instances = apply_two_criteria_filter(instances, temporal_filter, identity_filter)
 
         # Only instance matching both criteria should pass
         assert len(filtered_instances) == 1
@@ -1658,19 +1635,13 @@ class TestOrphanedResourceCleanupWorkflow:
         mock_ec2.delete_security_group.return_value = {}
         mock_ec2.describe_instances.return_value = {
             "Reservations": [
-                {
-                    "Instances": [
-                        {"InstanceId": "i-zombie001", "State": {"Name": "terminated"}}
-                    ]
-                }
+                {"Instances": [{"InstanceId": "i-zombie001", "State": {"Name": "terminated"}}]}
             ]
         }
         mock_ec2.describe_images.return_value = {"Images": []}
 
         # Setup orphaned key pairs
-        mock_ec2.describe_key_pairs.return_value = {
-            "KeyPairs": [{"KeyName": "packer_orphan_key1"}]
-        }
+        mock_ec2.describe_key_pairs.return_value = {"KeyPairs": [{"KeyName": "packer_orphan_key1"}]}
 
         def get_paginator_side_effect(operation):
             mock_pag = MagicMock()
@@ -1708,9 +1679,9 @@ class TestOrphanedResourceCleanupWorkflow:
             first_phase2_idx = operation_order.index(phase2_ops[0])
 
             # Phase 1 should come before Phase 2
-            assert (
-                first_phase1_idx < first_phase2_idx
-            ), f"Phase 1 should execute before Phase 2. Order: {operation_order}"
+            assert first_phase1_idx < first_phase2_idx, (
+                f"Phase 1 should execute before Phase 2. Order: {operation_order}"
+            )
 
     def test_combined_cleanup_result_totals(self):
         """

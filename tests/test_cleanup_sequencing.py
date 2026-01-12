@@ -4,8 +4,7 @@ Feature: packer-resource-reaper, Property 3: Dependency-Aware Cleanup Sequencing
 Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5, 2.7, 2.8
 """
 
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 from hypothesis import given, settings
@@ -26,11 +25,11 @@ from reaper.models import (
 def create_instance(
     instance_id: str,
     state: str = "running",
-    key_name: Optional[str] = None,
-    security_groups: Optional[List[str]] = None,
+    key_name: str | None = None,
+    security_groups: list[str] | None = None,
 ) -> PackerInstance:
     """Helper to create a PackerInstance for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerInstance(
         resource_id=instance_id,
         resource_type=ResourceType.INSTANCE,
@@ -52,7 +51,7 @@ def create_security_group(
     group_name: str = "packer_sg",
 ) -> PackerSecurityGroup:
     """Helper to create a PackerSecurityGroup for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerSecurityGroup(
         resource_id=group_id,
         resource_type=ResourceType.SECURITY_GROUP,
@@ -71,7 +70,7 @@ def create_key_pair(
     key_id: str = "key-test123",
 ) -> PackerKeyPair:
     """Helper to create a PackerKeyPair for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerKeyPair(
         resource_id=key_id,
         resource_type=ResourceType.KEY_PAIR,
@@ -85,10 +84,10 @@ def create_key_pair(
 
 
 def create_mock_ec2_client(
-    instance_states: Optional[dict] = None,
-    dependency_violations: Optional[List[str]] = None,
-    associated_volumes: Optional[dict] = None,
-    associated_eips: Optional[dict] = None,
+    instance_states: dict | None = None,
+    dependency_violations: list[str] | None = None,
+    associated_volumes: dict | None = None,
+    associated_eips: dict | None = None,
 ) -> MagicMock:
     """Create a mock EC2 client that tracks operation order."""
     mock_client = MagicMock()
@@ -132,9 +131,7 @@ def create_mock_ec2_client(
         reservations = []
         for iid in InstanceIds:
             state = instance_states.get(iid, "terminated")
-            reservations.append(
-                {"Instances": [{"InstanceId": iid, "State": {"Name": state}}]}
-            )
+            reservations.append({"Instances": [{"InstanceId": iid, "State": {"Name": state}}]})
         return {"Reservations": reservations}
 
     def describe_volumes(Filters=None, VolumeIds=None):
@@ -194,10 +191,10 @@ def create_mock_ec2_client(
 def create_volume(
     volume_id: str,
     state: str = "available",
-    attached_instance: Optional[str] = None,
+    attached_instance: str | None = None,
 ) -> PackerVolume:
     """Helper to create a PackerVolume for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerVolume(
         resource_id=volume_id,
         resource_type=ResourceType.VOLUME,
@@ -215,11 +212,11 @@ def create_volume(
 def create_elastic_ip(
     allocation_id: str,
     public_ip: str = "1.2.3.4",
-    instance_id: Optional[str] = None,
-    association_id: Optional[str] = None,
+    instance_id: str | None = None,
+    association_id: str | None = None,
 ) -> PackerElasticIP:
     """Helper to create a PackerElasticIP for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerElasticIP(
         resource_id=allocation_id,
         resource_type=ResourceType.ELASTIC_IP,
@@ -307,12 +304,8 @@ def test_instances_terminated_before_dependent_resources(
     operations = mock_client.operation_order
 
     # Find indices of different operation types
-    instance_ops = [
-        i for i, (op, _) in enumerate(operations) if op == "terminate_instance"
-    ]
-    sg_ops = [
-        i for i, (op, _) in enumerate(operations) if op == "delete_security_group"
-    ]
+    instance_ops = [i for i, (op, _) in enumerate(operations) if op == "terminate_instance"]
+    sg_ops = [i for i, (op, _) in enumerate(operations) if op == "delete_security_group"]
     kp_ops = [i for i, (op, _) in enumerate(operations) if op == "delete_key_pair"]
 
     # All instance terminations should come before any SG or KP deletions
@@ -358,8 +351,7 @@ def test_dependency_violations_cause_deferral(
 
     # Create test resources
     instances = [
-        create_instance(instance_id=f"i-{i:08d}", state="running")
-        for i in range(num_instances)
+        create_instance(instance_id=f"i-{i:08d}", state="running") for i in range(num_instances)
     ]
 
     security_groups = [
@@ -388,15 +380,15 @@ def test_dependency_violations_cause_deferral(
     # Verify deferred resources
     expected_deleted = num_security_groups - num_deferred_sgs
 
-    assert (
-        len(result.deleted_security_groups) == expected_deleted
-    ), f"Expected {expected_deleted} deleted SGs, got {len(result.deleted_security_groups)}"
+    assert len(result.deleted_security_groups) == expected_deleted, (
+        f"Expected {expected_deleted} deleted SGs, got {len(result.deleted_security_groups)}"
+    )
 
     # Deferred resources should include the SGs with dependency violations
     for sg_id in dependency_violations:
-        assert (
-            sg_id in result.deferred_resources
-        ), f"Security group {sg_id} with dependency violation should be deferred"
+        assert sg_id in result.deferred_resources, (
+            f"Security group {sg_id} with dependency violation should be deferred"
+        )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -446,13 +438,13 @@ def test_transitional_instance_states_handled(
     # For shutting-down instances, they should be deferred (not re-terminated)
     # For terminated instances, they should be counted as terminated
     if instance_state == "shutting-down":
-        assert (
-            "i-00000001" in result.deferred_resources
-        ), "Shutting-down instance should be deferred"
+        assert "i-00000001" in result.deferred_resources, (
+            "Shutting-down instance should be deferred"
+        )
     else:  # terminated
-        assert (
-            "i-00000001" in result.terminated_instances
-        ), "Already terminated instance should be in terminated list"
+        assert "i-00000001" in result.terminated_instances, (
+            "Already terminated instance should be in terminated list"
+        )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -476,8 +468,7 @@ def test_cleanup_order_is_deterministic(
     """
     # Create test resources
     instances = [
-        create_instance(instance_id=f"i-{i:08d}", state="running")
-        for i in range(num_instances)
+        create_instance(instance_id=f"i-{i:08d}", state="running") for i in range(num_instances)
     ]
 
     security_groups = [
@@ -526,9 +517,9 @@ def test_cleanup_order_is_deterministic(
             # All operations of earlier type should complete before later type starts
             first_later = min(j for j, op in enumerate(op_types) if op == later_op)
             last_earlier = max(j for j, op in enumerate(op_types) if op == op_type)
-            assert (
-                last_earlier < first_later
-            ), f"All {op_type} operations should complete before {later_op} starts"
+            assert last_earlier < first_later, (
+                f"All {op_type} operations should complete before {later_op} starts"
+            )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -549,8 +540,7 @@ def test_dry_run_preserves_ordering_without_execution(
     Validates: Requirements 2.1
     """
     instances = [
-        create_instance(instance_id=f"i-{i:08d}", state="running")
-        for i in range(num_instances)
+        create_instance(instance_id=f"i-{i:08d}", state="running") for i in range(num_instances)
     ]
 
     security_groups = [
@@ -621,12 +611,8 @@ def test_associated_resources_collected_before_termination(
     associated_eips = {}
     for i in range(num_instances):
         instance_id = f"i-{i:08d}"
-        associated_volumes[instance_id] = [
-            f"vol-{i:04d}{j:04d}" for j in range(num_volumes)
-        ]
-        associated_eips[instance_id] = [
-            f"eipalloc-{i:04d}{j:04d}" for j in range(num_eips)
-        ]
+        associated_volumes[instance_id] = [f"vol-{i:04d}{j:04d}" for j in range(num_volumes)]
+        associated_eips[instance_id] = [f"eipalloc-{i:04d}{j:04d}" for j in range(num_eips)]
 
     mock_client = create_mock_ec2_client(
         associated_volumes=associated_volumes,
@@ -639,14 +625,14 @@ def test_associated_resources_collected_before_termination(
         associated = engine.collect_associated_resources(instance)
 
         # Verify security groups are collected
-        assert set(associated.security_group_ids) == set(
-            instance.security_groups
-        ), f"Security groups should be collected for instance {instance.resource_id}"
+        assert set(associated.security_group_ids) == set(instance.security_groups), (
+            f"Security groups should be collected for instance {instance.resource_id}"
+        )
 
         # Verify key pair is collected
-        assert (
-            associated.key_pair_name == instance.key_name
-        ), f"Key pair should be collected for instance {instance.resource_id}"
+        assert associated.key_pair_name == instance.key_name, (
+            f"Key pair should be collected for instance {instance.resource_id}"
+        )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -665,8 +651,7 @@ def test_waiter_called_after_termination(
     Validates: Requirements 2.3, 2.5
     """
     instances = [
-        create_instance(instance_id=f"i-{i:08d}", state="running")
-        for i in range(num_instances)
+        create_instance(instance_id=f"i-{i:08d}", state="running") for i in range(num_instances)
     ]
 
     resources = ResourceCollection(instances=instances)
@@ -713,15 +698,11 @@ def test_shutting_down_instances_deferred(
 
     # Create running instances
     for i in range(num_running):
-        instances.append(
-            create_instance(instance_id=f"i-running-{i:04d}", state="running")
-        )
+        instances.append(create_instance(instance_id=f"i-running-{i:04d}", state="running"))
 
     # Create shutting-down instances
     for i in range(num_shutting_down):
-        instances.append(
-            create_instance(instance_id=f"i-shutting-{i:04d}", state="shutting-down")
-        )
+        instances.append(create_instance(instance_id=f"i-shutting-{i:04d}", state="shutting-down"))
 
     resources = ResourceCollection(instances=instances)
 
@@ -734,14 +715,14 @@ def test_shutting_down_instances_deferred(
     # Verify shutting-down instances are deferred
     for i in range(num_shutting_down):
         instance_id = f"i-shutting-{i:04d}"
-        assert (
-            instance_id in result.deferred_resources
-        ), f"Shutting-down instance {instance_id} should be deferred"
+        assert instance_id in result.deferred_resources, (
+            f"Shutting-down instance {instance_id} should be deferred"
+        )
 
     # Verify running instances are terminated
-    assert (
-        len(result.terminated_instances) == num_running
-    ), f"Expected {num_running} terminated instances, got {len(result.terminated_instances)}"
+    assert len(result.terminated_instances) == num_running, (
+        f"Expected {num_running} terminated instances, got {len(result.terminated_instances)}"
+    )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -924,12 +905,8 @@ def test_dependent_resources_deleted_after_instance_termination(
     operations = mock_client.operation_order
 
     # Find indices of different operation types
-    instance_ops = [
-        i for i, (op, _) in enumerate(operations) if op == "terminate_instance"
-    ]
-    sg_ops = [
-        i for i, (op, _) in enumerate(operations) if op == "delete_security_group"
-    ]
+    instance_ops = [i for i, (op, _) in enumerate(operations) if op == "terminate_instance"]
+    sg_ops = [i for i, (op, _) in enumerate(operations) if op == "delete_security_group"]
     kp_ops = [i for i, (op, _) in enumerate(operations) if op == "delete_key_pair"]
     eip_ops = [i for i, (op, _) in enumerate(operations) if op == "release_address"]
 
@@ -939,18 +916,18 @@ def test_dependent_resources_deleted_after_instance_termination(
 
         if sg_ops:
             min_sg_op = min(sg_ops)
-            assert (
-                max_instance_op < min_sg_op
-            ), "Security groups should be deleted after instance termination"
+            assert max_instance_op < min_sg_op, (
+                "Security groups should be deleted after instance termination"
+            )
 
         if kp_ops:
             min_kp_op = min(kp_ops)
-            assert (
-                max_instance_op < min_kp_op
-            ), "Key pairs should be deleted after instance termination"
+            assert max_instance_op < min_kp_op, (
+                "Key pairs should be deleted after instance termination"
+            )
 
         if eip_ops:
             min_eip_op = min(eip_ops)
-            assert (
-                max_instance_op < min_eip_op
-            ), "EIPs should be released after instance termination"
+            assert max_instance_op < min_eip_op, (
+                "EIPs should be released after instance termination"
+            )

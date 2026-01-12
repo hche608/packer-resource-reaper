@@ -7,8 +7,8 @@ Requirements 2.4, 2.6, 2.8.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from botocore.exceptions import ClientError
 
@@ -44,8 +44,8 @@ class NetworkManager:
         self.dry_run = dry_run
 
     def get_security_groups_for_instance(
-        self, security_group_ids: List[str], account_id: str, region: str
-    ) -> List[PackerSecurityGroup]:
+        self, security_group_ids: list[str], account_id: str, region: str
+    ) -> list[PackerSecurityGroup]:
         """
         Get security groups by their IDs.
 
@@ -77,7 +77,7 @@ class NetworkManager:
                     PackerSecurityGroup(
                         resource_id=sg["GroupId"],
                         resource_type=ResourceType.SECURITY_GROUP,
-                        creation_time=datetime.now(timezone.utc),
+                        creation_time=datetime.now(UTC),
                         tags=tags,
                         region=region,
                         account_id=account_id,
@@ -95,8 +95,8 @@ class NetworkManager:
         self,
         account_id: str,
         region: str,
-        filters: Optional[List[Dict[str, Any]]] = None,
-    ) -> List[PackerSecurityGroup]:
+        filters: list[dict[str, Any]] | None = None,
+    ) -> list[PackerSecurityGroup]:
         """
         Scan all security groups in the account.
 
@@ -127,7 +127,7 @@ class NetworkManager:
                         PackerSecurityGroup(
                             resource_id=sg["GroupId"],
                             resource_type=ResourceType.SECURITY_GROUP,
-                            creation_time=datetime.now(timezone.utc),
+                            creation_time=datetime.now(UTC),
                             tags=tags,
                             region=region,
                             account_id=account_id,
@@ -144,7 +144,7 @@ class NetworkManager:
 
     def get_key_pair_by_name(
         self, key_name: str, account_id: str, region: str
-    ) -> Optional[PackerKeyPair]:
+    ) -> PackerKeyPair | None:
         """
         Get a key pair by its name.
 
@@ -165,7 +165,7 @@ class NetworkManager:
             if key_pairs:
                 kp = key_pairs[0]
                 tags = {t["Key"]: t["Value"] for t in kp.get("Tags", [])}
-                creation_time = kp.get("CreateTime", datetime.now(timezone.utc))
+                creation_time = kp.get("CreateTime", datetime.now(UTC))
 
                 return PackerKeyPair(
                     resource_id=kp.get("KeyPairId", kp["KeyName"]),
@@ -187,7 +187,7 @@ class NetworkManager:
 
         return None
 
-    def scan_key_pairs(self, account_id: str, region: str) -> List[PackerKeyPair]:
+    def scan_key_pairs(self, account_id: str, region: str) -> list[PackerKeyPair]:
         """
         Scan all key pairs in the account.
 
@@ -203,7 +203,7 @@ class NetworkManager:
             response = self.ec2.describe_key_pairs()
             for kp in response.get("KeyPairs", []):
                 tags = {t["Key"]: t["Value"] for t in kp.get("Tags", [])}
-                creation_time = kp.get("CreateTime", datetime.now(timezone.utc))
+                creation_time = kp.get("CreateTime", datetime.now(UTC))
 
                 key_pairs.append(
                     PackerKeyPair(
@@ -225,7 +225,7 @@ class NetworkManager:
 
     def get_eips_for_instance(
         self, instance_id: str, account_id: str, region: str
-    ) -> List[PackerElasticIP]:
+    ) -> list[PackerElasticIP]:
         """
         Get Elastic IPs associated with a specific instance.
 
@@ -249,7 +249,7 @@ class NetworkManager:
                     PackerElasticIP(
                         resource_id=address.get("AllocationId", address["PublicIp"]),
                         resource_type=ResourceType.ELASTIC_IP,
-                        creation_time=datetime.now(timezone.utc),
+                        creation_time=datetime.now(UTC),
                         tags=tags,
                         region=region,
                         account_id=account_id,
@@ -264,7 +264,7 @@ class NetworkManager:
 
         return elastic_ips
 
-    def scan_elastic_ips(self, account_id: str, region: str) -> List[PackerElasticIP]:
+    def scan_elastic_ips(self, account_id: str, region: str) -> list[PackerElasticIP]:
         """
         Scan all Elastic IPs in the account.
 
@@ -285,7 +285,7 @@ class NetworkManager:
                     PackerElasticIP(
                         resource_id=address.get("AllocationId", address["PublicIp"]),
                         resource_type=ResourceType.ELASTIC_IP,
-                        creation_time=datetime.now(timezone.utc),
+                        creation_time=datetime.now(UTC),
                         tags=tags,
                         region=region,
                         account_id=account_id,
@@ -302,8 +302,8 @@ class NetworkManager:
         return elastic_ips
 
     def delete_security_groups(
-        self, security_groups: List[PackerSecurityGroup]
-    ) -> tuple[List[str], List[str], dict]:
+        self, security_groups: list[PackerSecurityGroup]
+    ) -> tuple[list[str], list[str], dict[str, str]]:
         """
         Delete security groups.
 
@@ -355,8 +355,8 @@ class NetworkManager:
             raise
 
     def delete_key_pairs(
-        self, key_pairs: List[PackerKeyPair]
-    ) -> tuple[List[str], List[str], dict]:
+        self, key_pairs: list[PackerKeyPair]
+    ) -> tuple[list[str], list[str], dict[str, str]]:
         """
         Delete key pairs.
 
@@ -401,8 +401,8 @@ class NetworkManager:
         return "deleted"
 
     def release_elastic_ips(
-        self, elastic_ips: List[PackerElasticIP]
-    ) -> tuple[List[str], List[str], dict]:
+        self, elastic_ips: list[PackerElasticIP]
+    ) -> tuple[list[str], list[str], dict[str, str]]:
         """
         Release elastic IPs.
 
@@ -440,9 +440,7 @@ class NetworkManager:
 
         # Check if EIP is associated with an instance
         if eip.association_id:
-            logger.info(
-                f"EIP {allocation_id} associated with {eip.instance_id}, deferring"
-            )
+            logger.info(f"EIP {allocation_id} associated with {eip.instance_id}, deferring")
             return "deferred"
 
         if self.dry_run:

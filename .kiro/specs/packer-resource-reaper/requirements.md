@@ -141,6 +141,10 @@ The AWS Packer Resource Reaper is a serverless application that acts as an exter
 10.8. WHEN deleting orphaned resources, THE Cleanup_Engine SHALL apply the same Dry_Run_Mode behavior as primary cleanup operations
 10.9. WHEN orphaned resources are cleaned up, THE Reaper SHALL log each deleted resource type and identifier to CloudWatch
 10.10. WHEN orphaned resources are cleaned up, THE Reaper SHALL include orphaned resource details in SNS notifications
+10.11. WHEN scanning for orphaned resources, THE Reaper SHALL only consider resources older than the configured age threshold (default: 2 hours, minimum: 1 hour) to prevent race conditions with active Packer builds that are still provisioning
+10.12. WHEN a key pair or IAM role is younger than the age threshold, THE Reaper SHALL skip it and log a debug message explaining why it was skipped
+
+**⚠️ CRITICAL SAFETY NOTE:** Orphaned resource cleanup includes age-based filtering to prevent a race condition where resources created by an active Packer build could be deleted before provisioning completes. Key pairs and IAM roles must be older than `max_resource_age_hours` (default: 2 hours) before they are considered for cleanup.
 
 ### Requirement 11: Configurable Log Level
 

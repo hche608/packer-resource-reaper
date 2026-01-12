@@ -13,8 +13,8 @@ Key features:
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from reaper.models import (
     CleanupResult,
@@ -40,18 +40,18 @@ class DryRunReport:
     as per Requirements 9.2 and 9.3.
     """
 
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     account_id: str = ""
     region: str = ""
 
     # Resources that would be cleaned
-    instances_to_terminate: List[Dict[str, Any]] = field(default_factory=list)
-    security_groups_to_delete: List[Dict[str, Any]] = field(default_factory=list)
-    key_pairs_to_delete: List[Dict[str, Any]] = field(default_factory=list)
-    volumes_to_delete: List[Dict[str, Any]] = field(default_factory=list)
-    snapshots_to_delete: List[Dict[str, Any]] = field(default_factory=list)
-    elastic_ips_to_release: List[Dict[str, Any]] = field(default_factory=list)
-    instance_profiles_to_delete: List[Dict[str, Any]] = field(default_factory=list)
+    instances_to_terminate: list[dict[str, Any]] = field(default_factory=list)
+    security_groups_to_delete: list[dict[str, Any]] = field(default_factory=list)
+    key_pairs_to_delete: list[dict[str, Any]] = field(default_factory=list)
+    volumes_to_delete: list[dict[str, Any]] = field(default_factory=list)
+    snapshots_to_delete: list[dict[str, Any]] = field(default_factory=list)
+    elastic_ips_to_release: list[dict[str, Any]] = field(default_factory=list)
+    instance_profiles_to_delete: list[dict[str, Any]] = field(default_factory=list)
 
     def total_resources(self) -> int:
         """Get total number of resources that would be cleaned."""
@@ -65,7 +65,7 @@ class DryRunReport:
             + len(self.instance_profiles_to_delete)
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert report to dictionary for serialization."""
         return {
             "timestamp": self.timestamp.isoformat(),
@@ -103,9 +103,7 @@ class DryRunExecutor:
         self.account_id = account_id
         self.region = region
 
-    def execute_dry_run(
-        self, resources: ResourceCollection
-    ) -> tuple[CleanupResult, DryRunReport]:
+    def execute_dry_run(self, resources: ResourceCollection) -> tuple[CleanupResult, DryRunReport]:
         """
         Execute dry-run cleanup simulation.
 
@@ -125,9 +123,7 @@ class DryRunExecutor:
         )
 
         # Log start of dry-run
-        logger.info(
-            f"[DRY RUN] Starting simulation for {resources.total_count()} resources"
-        )
+        logger.info(f"[DRY RUN] Starting simulation for {resources.total_count()} resources")
 
         # Process instances
         self._process_instances(resources.instances, result, report)
@@ -157,7 +153,7 @@ class DryRunExecutor:
 
     def _process_instances(
         self,
-        instances: List[PackerInstance],
+        instances: list[PackerInstance],
         result: CleanupResult,
         report: DryRunReport,
     ) -> None:
@@ -189,9 +185,7 @@ class DryRunExecutor:
                     "security_groups": instance.security_groups,
                     "tags": instance.tags,
                     "launch_time": (
-                        instance.launch_time.isoformat()
-                        if instance.launch_time
-                        else None
+                        instance.launch_time.isoformat() if instance.launch_time else None
                     ),
                     "termination_reason": "Matches Packer key pair pattern and exceeds age threshold",
                 }
@@ -199,7 +193,7 @@ class DryRunExecutor:
 
     def _process_security_groups(
         self,
-        security_groups: List[PackerSecurityGroup],
+        security_groups: list[PackerSecurityGroup],
         result: CleanupResult,
         report: DryRunReport,
     ) -> None:
@@ -226,7 +220,7 @@ class DryRunExecutor:
 
     def _process_key_pairs(
         self,
-        key_pairs: List[PackerKeyPair],
+        key_pairs: list[PackerKeyPair],
         result: CleanupResult,
         report: DryRunReport,
     ) -> None:
@@ -252,7 +246,7 @@ class DryRunExecutor:
 
     def _process_volumes(
         self,
-        volumes: List[PackerVolume],
+        volumes: list[PackerVolume],
         result: CleanupResult,
         report: DryRunReport,
     ) -> None:
@@ -264,8 +258,7 @@ class DryRunExecutor:
 
         for volume in volumes:
             logger.info(
-                f"[DRY RUN]   - {volume.resource_id} "
-                f"({volume.size} GB, state: {volume.state})"
+                f"[DRY RUN]   - {volume.resource_id} ({volume.size} GB, state: {volume.state})"
             )
 
             result.deleted_volumes.append(volume.resource_id)
@@ -283,7 +276,7 @@ class DryRunExecutor:
 
     def _process_snapshots(
         self,
-        snapshots: List[PackerSnapshot],
+        snapshots: list[PackerSnapshot],
         result: CleanupResult,
         report: DryRunReport,
     ) -> None:
@@ -313,7 +306,7 @@ class DryRunExecutor:
 
     def _process_elastic_ips(
         self,
-        elastic_ips: List[PackerElasticIP],
+        elastic_ips: list[PackerElasticIP],
         result: CleanupResult,
         report: DryRunReport,
     ) -> None:
@@ -340,7 +333,7 @@ class DryRunExecutor:
 
     def _process_instance_profiles(
         self,
-        instance_profiles: List[PackerInstanceProfile],
+        instance_profiles: list[PackerInstanceProfile],
         result: CleanupResult,
         report: DryRunReport,
     ) -> None:
@@ -348,14 +341,11 @@ class DryRunExecutor:
         if not instance_profiles:
             return
 
-        logger.info(
-            f"[DRY RUN] Would delete {len(instance_profiles)} instance profiles:"
-        )
+        logger.info(f"[DRY RUN] Would delete {len(instance_profiles)} instance profiles:")
 
         for profile in instance_profiles:
             logger.info(
-                f"[DRY RUN]   - {profile.instance_profile_name} "
-                f"(roles: {profile.roles or 'none'})"
+                f"[DRY RUN]   - {profile.instance_profile_name} (roles: {profile.roles or 'none'})"
             )
 
             result.deleted_instance_profiles.append(profile.instance_profile_name)
@@ -379,25 +369,15 @@ class DryRunExecutor:
         logger.info(f"[DRY RUN] Region: {report.region}")
         logger.info(f"[DRY RUN] Timestamp: {report.timestamp.isoformat()}")
         logger.info("-" * 40)
-        logger.info(
-            f"[DRY RUN] Total resources that would be cleaned: {report.total_resources()}"
-        )
-        logger.info(
-            f"[DRY RUN]   - Instances to terminate: {len(report.instances_to_terminate)}"
-        )
+        logger.info(f"[DRY RUN] Total resources that would be cleaned: {report.total_resources()}")
+        logger.info(f"[DRY RUN]   - Instances to terminate: {len(report.instances_to_terminate)}")
         logger.info(
             f"[DRY RUN]   - Security groups to delete: {len(report.security_groups_to_delete)}"
         )
-        logger.info(
-            f"[DRY RUN]   - Key pairs to delete: {len(report.key_pairs_to_delete)}"
-        )
+        logger.info(f"[DRY RUN]   - Key pairs to delete: {len(report.key_pairs_to_delete)}")
         logger.info(f"[DRY RUN]   - Volumes to delete: {len(report.volumes_to_delete)}")
-        logger.info(
-            f"[DRY RUN]   - Snapshots to delete: {len(report.snapshots_to_delete)}"
-        )
-        logger.info(
-            f"[DRY RUN]   - Elastic IPs to release: {len(report.elastic_ips_to_release)}"
-        )
+        logger.info(f"[DRY RUN]   - Snapshots to delete: {len(report.snapshots_to_delete)}")
+        logger.info(f"[DRY RUN]   - Elastic IPs to release: {len(report.elastic_ips_to_release)}")
         logger.info(
             f"[DRY RUN]   - Instance profiles to delete: {len(report.instance_profiles_to_delete)}"
         )
@@ -426,7 +406,7 @@ def log_dry_run_planned_action(
     action: str,
     resource_type: str,
     resource_id: str,
-    details: Optional[Dict[str, Any]] = None,
+    details: dict[str, Any] | None = None,
 ) -> None:
     """
     Log a planned action in dry-run mode.

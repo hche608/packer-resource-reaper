@@ -1,8 +1,7 @@
 """Pytest configuration and shared fixtures."""
 
 import os
-from datetime import datetime, timezone
-from typing import Dict
+from datetime import UTC, datetime
 
 import pytest
 
@@ -12,7 +11,7 @@ os.environ.setdefault("AWS_REGION", "us-east-1")
 
 
 @pytest.fixture
-def sample_tags() -> Dict[str, str]:
+def sample_tags() -> dict[str, str]:
     """Sample Packer-related tags."""
     return {
         "Name": "Packer Builder",
@@ -22,7 +21,7 @@ def sample_tags() -> Dict[str, str]:
 
 
 @pytest.fixture
-def sample_instance_data(sample_tags) -> Dict:
+def sample_instance_data(sample_tags) -> dict:
     """Sample EC2 instance data."""
     return {
         "InstanceId": "i-1234567890abcdef0",
@@ -31,26 +30,26 @@ def sample_instance_data(sample_tags) -> Dict:
         "VpcId": "vpc-12345678",
         "SecurityGroups": [{"GroupId": "sg-12345678", "GroupName": "packer_sg"}],
         "KeyName": "packer_key",
-        "LaunchTime": datetime.now(timezone.utc),
+        "LaunchTime": datetime.now(UTC),
         "Tags": [{"Key": k, "Value": v} for k, v in sample_tags.items()],
     }
 
 
 @pytest.fixture
-def sample_volume_data(sample_tags) -> Dict:
+def sample_volume_data(sample_tags) -> dict:
     """Sample EBS volume data."""
     return {
         "VolumeId": "vol-1234567890abcdef0",
         "Size": 8,
         "State": "available",
-        "CreateTime": datetime.now(timezone.utc),
+        "CreateTime": datetime.now(UTC),
         "Attachments": [],
         "Tags": [{"Key": k, "Value": v} for k, v in sample_tags.items()],
     }
 
 
 @pytest.fixture
-def sample_security_group_data(sample_tags) -> Dict:
+def sample_security_group_data(sample_tags) -> dict:
     """Sample security group data."""
     return {
         "GroupId": "sg-1234567890abcdef0",
@@ -62,12 +61,12 @@ def sample_security_group_data(sample_tags) -> Dict:
 
 
 @pytest.fixture
-def sample_key_pair_data() -> Dict:
+def sample_key_pair_data() -> dict:
     """Sample key pair data."""
     return {
         "KeyPairId": "key-1234567890abcdef0",
         "KeyName": "packer_key_12345",
         "KeyFingerprint": "ab:cd:ef:12:34:56:78:90",
-        "CreateTime": datetime.now(timezone.utc),
+        "CreateTime": datetime.now(UTC),
         "Tags": [],
     }

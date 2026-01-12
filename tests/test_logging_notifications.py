@@ -9,8 +9,7 @@ This module tests that:
 - SNS notifications are sent when cleanup actions are performed (Requirement 4.4)
 """
 
-from datetime import datetime, timezone
-from typing import List
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 from hypothesis import given, settings
@@ -43,7 +42,7 @@ def create_instance(
     name: str = "Packer Builder",
 ) -> PackerInstance:
     """Helper to create a PackerInstance for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerInstance(
         resource_id=instance_id,
         resource_type=ResourceType.INSTANCE,
@@ -65,7 +64,7 @@ def create_security_group(
     group_name: str = "packer_sg",
 ) -> PackerSecurityGroup:
     """Helper to create a PackerSecurityGroup for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerSecurityGroup(
         resource_id=group_id,
         resource_type=ResourceType.SECURITY_GROUP,
@@ -84,7 +83,7 @@ def create_key_pair(
     key_id: str = "key-test123",
 ) -> PackerKeyPair:
     """Helper to create a PackerKeyPair for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerKeyPair(
         resource_id=key_id,
         resource_type=ResourceType.KEY_PAIR,
@@ -103,7 +102,7 @@ def create_volume(
     state: str = "available",
 ) -> PackerVolume:
     """Helper to create a PackerVolume for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerVolume(
         resource_id=volume_id,
         resource_type=ResourceType.VOLUME,
@@ -123,7 +122,7 @@ def create_snapshot(
     state: str = "completed",
 ) -> PackerSnapshot:
     """Helper to create a PackerSnapshot for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerSnapshot(
         resource_id=snapshot_id,
         resource_type=ResourceType.SNAPSHOT,
@@ -143,7 +142,7 @@ def create_elastic_ip(
     public_ip: str = "1.2.3.4",
 ) -> PackerElasticIP:
     """Helper to create a PackerElasticIP for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return PackerElasticIP(
         resource_id=allocation_id,
         resource_type=ResourceType.ELASTIC_IP,
@@ -220,12 +219,9 @@ def test_notification_includes_instance_ids(
     Validates: Requirements 3.5
     """
     # Create test resources
-    instances = [
-        create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)
-    ]
+    instances = [create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)]
     security_groups = [
-        create_security_group(group_id=f"sg-{i:08x}")
-        for i in range(num_security_groups)
+        create_security_group(group_id=f"sg-{i:08x}") for i in range(num_security_groups)
     ]
     key_pairs = [
         create_key_pair(key_name=f"packer_key_{i}", key_id=f"key-{i:08x}")
@@ -272,9 +268,9 @@ def test_notification_includes_instance_ids(
 
     # Verify all instance IDs are in the message
     for instance in instances:
-        assert (
-            instance.resource_id in message
-        ), f"Instance ID {instance.resource_id} should be in notification message"
+        assert instance.resource_id in message, (
+            f"Instance ID {instance.resource_id} should be in notification message"
+        )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -290,9 +286,7 @@ def test_notification_includes_console_links(num_instances: int):
 
     Validates: Requirements 3.6
     """
-    instances = [
-        create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)
-    ]
+    instances = [create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)]
 
     resources = ResourceCollection(instances=instances)
 
@@ -316,13 +310,11 @@ def test_notification_includes_console_links(num_instances: int):
     # Verify console links are present for each instance
     for instance in instances:
         expected_link_part = f"InstanceDetails:instanceId={instance.resource_id}"
-        assert (
-            expected_link_part in message
-        ), f"Console link for {instance.resource_id} should be in notification"
+        assert expected_link_part in message, (
+            f"Console link for {instance.resource_id} should be in notification"
+        )
         # Also verify the base console URL is present
-        assert (
-            "console.aws.amazon.com" in message
-        ), "AWS Console base URL should be in notification"
+        assert "console.aws.amazon.com" in message, "AWS Console base URL should be in notification"
 
 
 @settings(max_examples=100, deadline=10000)
@@ -348,12 +340,9 @@ def test_notification_includes_auxiliary_resources(
 
     Validates: Requirements 3.5
     """
-    instances = [
-        create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)
-    ]
+    instances = [create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)]
     security_groups = [
-        create_security_group(group_id=f"sg-{i:08x}")
-        for i in range(num_security_groups)
+        create_security_group(group_id=f"sg-{i:08x}") for i in range(num_security_groups)
     ]
     key_pairs = [
         create_key_pair(key_name=f"packer_key_{i}", key_id=f"key-{i:08x}")
@@ -396,27 +385,23 @@ def test_notification_includes_auxiliary_resources(
 
     # Verify all security groups are in the message
     for sg in security_groups:
-        assert (
-            sg.resource_id in message
-        ), f"Security group {sg.resource_id} should be in notification"
+        assert sg.resource_id in message, (
+            f"Security group {sg.resource_id} should be in notification"
+        )
 
     # Verify all key pairs are in the message
     for kp in key_pairs:
-        assert (
-            kp.key_name in message
-        ), f"Key pair {kp.key_name} should be in notification"
+        assert kp.key_name in message, f"Key pair {kp.key_name} should be in notification"
 
     # Verify all volumes are in the message
     for vol in volumes:
-        assert (
-            vol.resource_id in message
-        ), f"Volume {vol.resource_id} should be in notification"
+        assert vol.resource_id in message, f"Volume {vol.resource_id} should be in notification"
 
     # Verify all elastic IPs are in the message
     for eip in elastic_ips:
-        assert (
-            eip.allocation_id in message
-        ), f"Elastic IP {eip.allocation_id} should be in notification"
+        assert eip.allocation_id in message, (
+            f"Elastic IP {eip.allocation_id} should be in notification"
+        )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -444,9 +429,7 @@ def test_dry_run_notification_includes_all_resources(
         )
         for i in range(num_instances)
     ]
-    volumes = [
-        create_volume(volume_id=f"vol-{i:08x}", size=8 + i) for i in range(num_volumes)
-    ]
+    volumes = [create_volume(volume_id=f"vol-{i:08x}", size=8 + i) for i in range(num_volumes)]
 
     resources = ResourceCollection(
         instances=instances,
@@ -471,18 +454,16 @@ def test_dry_run_notification_includes_all_resources(
 
     # Verify all instances are in the message
     for instance in instances:
-        assert (
-            instance.resource_id in message
-        ), f"Instance {instance.resource_id} should be in dry-run report"
-        assert (
-            instance.instance_type in message
-        ), f"Instance type {instance.instance_type} should be in dry-run report"
+        assert instance.resource_id in message, (
+            f"Instance {instance.resource_id} should be in dry-run report"
+        )
+        assert instance.instance_type in message, (
+            f"Instance type {instance.instance_type} should be in dry-run report"
+        )
 
     # Verify all volumes are in the message
     for vol in volumes:
-        assert (
-            vol.resource_id in message
-        ), f"Volume {vol.resource_id} should be in dry-run report"
+        assert vol.resource_id in message, f"Volume {vol.resource_id} should be in dry-run report"
 
 
 @settings(max_examples=100, deadline=10000)
@@ -502,9 +483,7 @@ def test_notification_includes_errors(
 
     Validates: Requirements 3.3
     """
-    instances = [
-        create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)
-    ]
+    instances = [create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)]
 
     resources = ResourceCollection(instances=instances)
 
@@ -538,9 +517,7 @@ def test_notification_includes_errors(
 
     # Verify error details are in the message
     for resource_id, error_msg in errors.items():
-        assert (
-            resource_id in message
-        ), f"Error resource {resource_id} should be in notification"
+        assert resource_id in message, f"Error resource {resource_id} should be in notification"
 
 
 @settings(max_examples=100, deadline=10000)
@@ -560,9 +537,7 @@ def test_notification_includes_deferred_resources(
 
     Validates: Requirements 3.3
     """
-    instances = [
-        create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)
-    ]
+    instances = [create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)]
 
     resources = ResourceCollection(instances=instances)
 
@@ -588,9 +563,7 @@ def test_notification_includes_deferred_resources(
 
     # Verify deferred resources are in the message
     for resource_id in deferred:
-        assert (
-            resource_id in message
-        ), f"Deferred resource {resource_id} should be in notification"
+        assert resource_id in message, f"Deferred resource {resource_id} should be in notification"
 
 
 @settings(max_examples=100, deadline=10000)
@@ -606,9 +579,7 @@ def test_notification_includes_account_and_region(num_instances: int):
 
     Validates: Requirements 3.3
     """
-    instances = [
-        create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)
-    ]
+    instances = [create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)]
 
     resources = ResourceCollection(instances=instances)
 
@@ -656,12 +627,9 @@ def test_notification_total_count_accurate(
 
     Validates: Requirements 3.3, 3.5
     """
-    instances = [
-        create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)
-    ]
+    instances = [create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)]
     security_groups = [
-        create_security_group(group_id=f"sg-{i:08x}")
-        for i in range(num_security_groups)
+        create_security_group(group_id=f"sg-{i:08x}") for i in range(num_security_groups)
     ]
     volumes = [create_volume(volume_id=f"vol-{i:08x}") for i in range(num_volumes)]
 
@@ -698,12 +666,12 @@ def test_notification_total_count_accurate(
     total_processed = str(resources.total_count())
     total_cleaned = str(result.total_cleaned())
 
-    assert (
-        total_processed in message
-    ), f"Total processed count ({total_processed}) should be in notification"
-    assert (
-        total_cleaned in message
-    ), f"Total cleaned count ({total_cleaned}) should be in notification"
+    assert total_processed in message, (
+        f"Total processed count ({total_processed}) should be in notification"
+    )
+    assert total_cleaned in message, (
+        f"Total cleaned count ({total_cleaned}) should be in notification"
+    )
 
 
 # Property tests for instance type and termination reason (Requirement 4.3)
@@ -713,16 +681,14 @@ def test_notification_total_count_accurate(
 @given(
     num_instances=st.integers(min_value=1, max_value=5),
     instance_types=st.lists(
-        st.sampled_from(
-            ["t3.micro", "t3.small", "m5.large", "c5.xlarge", "r5.2xlarge"]
-        ),
+        st.sampled_from(["t3.micro", "t3.small", "m5.large", "c5.xlarge", "r5.2xlarge"]),
         min_size=1,
         max_size=5,
     ),
 )
 def test_notification_includes_instance_type(
     num_instances: int,
-    instance_types: List[str],
+    instance_types: list[str],
 ):
     """
     Feature: packer-resource-reaper, Property 7: Comprehensive Logging and Notification
@@ -765,9 +731,9 @@ def test_notification_includes_instance_type(
 
     # Verify all instance types are in the message (Requirement 4.3)
     for i, instance in enumerate(instances):
-        assert (
-            instance.instance_type in message
-        ), f"Instance type {instance.instance_type} should be in notification"
+        assert instance.instance_type in message, (
+            f"Instance type {instance.instance_type} should be in notification"
+        )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -783,9 +749,7 @@ def test_notification_includes_termination_reason(num_instances: int):
 
     Validates: Requirements 4.3
     """
-    instances = [
-        create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)
-    ]
+    instances = [create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)]
 
     resources = ResourceCollection(instances=instances)
 
@@ -807,9 +771,9 @@ def test_notification_includes_termination_reason(num_instances: int):
     message = mock_sns.published_messages[0]["Message"]
 
     # Verify termination reason is in the message (Requirement 4.3)
-    assert (
-        DEFAULT_TERMINATION_REASON in message
-    ), f"Termination reason '{DEFAULT_TERMINATION_REASON}' should be in notification"
+    assert DEFAULT_TERMINATION_REASON in message, (
+        f"Termination reason '{DEFAULT_TERMINATION_REASON}' should be in notification"
+    )
 
 
 @settings(max_examples=100, deadline=10000)
@@ -825,9 +789,7 @@ def test_dry_run_notification_includes_termination_reason(num_instances: int):
 
     Validates: Requirements 4.3, 9.3
     """
-    instances = [
-        create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)
-    ]
+    instances = [create_instance(instance_id=f"i-{i:08x}") for i in range(num_instances)]
 
     resources = ResourceCollection(instances=instances)
 
@@ -844,9 +806,9 @@ def test_dry_run_notification_includes_termination_reason(num_instances: int):
     message = mock_sns.published_messages[0]["Message"]
 
     # Verify termination reason is in the dry-run report
-    assert (
-        DEFAULT_TERMINATION_REASON in message
-    ), f"Termination reason '{DEFAULT_TERMINATION_REASON}' should be in dry-run report"
+    assert DEFAULT_TERMINATION_REASON in message, (
+        f"Termination reason '{DEFAULT_TERMINATION_REASON}' should be in dry-run report"
+    )
 
 
 # Property tests for CloudWatch logging (Requirement 4.2)
@@ -889,9 +851,9 @@ def test_logger_records_all_scanned_resources(num_resources: int):
 
     # Should have: 1 scan start + num_resources scanned + 1 scan complete
     expected_entries = 2 + num_resources
-    assert (
-        len(entries) == expected_entries
-    ), f"Expected {expected_entries} log entries, got {len(entries)}"
+    assert len(entries) == expected_entries, (
+        f"Expected {expected_entries} log entries, got {len(entries)}"
+    )
 
     # Verify scan entries have correct action type
     scan_entries = [e for e in entries if e.action == ActionType.SCAN]
@@ -935,15 +897,13 @@ def test_logger_records_all_cleanup_actions(num_actions: int):
 
     # Should have: num_actions * 2 (start + complete for each)
     expected_entries = num_actions * 2
-    assert (
-        len(entries) == expected_entries
-    ), f"Expected {expected_entries} log entries, got {len(entries)}"
+    assert len(entries) == expected_entries, (
+        f"Expected {expected_entries} log entries, got {len(entries)}"
+    )
 
     # Verify terminate entries have correct action type
     terminate_entries = [e for e in entries if e.action == ActionType.TERMINATE]
-    assert (
-        len(terminate_entries) == expected_entries
-    ), "All entries should be TERMINATE actions"
+    assert len(terminate_entries) == expected_entries, "All entries should be TERMINATE actions"
 
 
 @settings(max_examples=100, deadline=10000)
@@ -979,9 +939,7 @@ def test_logger_records_errors_with_details(num_errors: int):
     # Verify all error entries were recorded
     entries = reaper_logger.get_log_entries()
 
-    assert (
-        len(entries) == num_errors
-    ), f"Expected {num_errors} error entries, got {len(entries)}"
+    assert len(entries) == num_errors, f"Expected {num_errors} error entries, got {len(entries)}"
 
     # Verify all entries are ERROR level
     for entry in entries:
@@ -1021,15 +979,11 @@ def test_logger_records_deferred_resources(num_deferred: int):
     # Verify all deferred entries were recorded
     entries = reaper_logger.get_log_entries()
 
-    assert (
-        len(entries) == num_deferred
-    ), f"Expected {num_deferred} deferred entries, got {len(entries)}"
+    assert len(entries) == num_deferred, (
+        f"Expected {num_deferred} deferred entries, got {len(entries)}"
+    )
 
     # Verify all entries are DEFER action type
     for entry in entries:
-        assert (
-            entry.action == ActionType.DEFER
-        ), "Deferred entries should have DEFER action type"
-        assert (
-            entry.level == LogLevel.WARNING
-        ), "Deferred entries should have WARNING level"
+        assert entry.action == ActionType.DEFER, "Deferred entries should have DEFER action type"
+        assert entry.level == LogLevel.WARNING, "Deferred entries should have WARNING level"

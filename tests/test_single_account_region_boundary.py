@@ -16,8 +16,7 @@ Key Requirements:
 - 8.6: SHALL be scoped to exactly one AWS account and one AWS region
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, datetime, timedelta
 
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
@@ -80,12 +79,12 @@ def create_test_instance(
     region: str,
     account_id: str,
     age_hours: float = 3.0,
-    key_name: Optional[str] = "packer_test_key",
+    key_name: str | None = "packer_test_key",
     vpc_id: str = "vpc-12345678",
-    tags: Optional[Dict[str, str]] = None,
+    tags: dict[str, str] | None = None,
 ) -> PackerInstance:
     """Create a test PackerInstance with specified parameters."""
-    launch_time = datetime.now(timezone.utc) - timedelta(hours=age_hours)
+    launch_time = datetime.now(UTC) - timedelta(hours=age_hours)
     default_tags = {"Name": "Packer Builder", "packer": "true"}
     if tags:
         default_tags.update(tags)
@@ -111,10 +110,10 @@ def create_test_volume(
     region: str,
     account_id: str,
     age_hours: float = 3.0,
-    tags: Optional[Dict[str, str]] = None,
+    tags: dict[str, str] | None = None,
 ) -> PackerVolume:
     """Create a test PackerVolume with specified parameters."""
-    creation_time = datetime.now(timezone.utc) - timedelta(hours=age_hours)
+    creation_time = datetime.now(UTC) - timedelta(hours=age_hours)
     default_tags = {"Name": "Packer Volume", "packer": "true"}
     if tags:
         default_tags.update(tags)
@@ -139,13 +138,13 @@ def create_test_security_group(
     account_id: str,
     group_name: str = "packer_sg_test",
     vpc_id: str = "vpc-12345678",
-    tags: Optional[Dict[str, str]] = None,
+    tags: dict[str, str] | None = None,
 ) -> PackerSecurityGroup:
     """Create a test PackerSecurityGroup with specified parameters."""
     return PackerSecurityGroup(
         resource_id=sg_id,
         resource_type=ResourceType.SECURITY_GROUP,
-        creation_time=datetime.now(timezone.utc),
+        creation_time=datetime.now(UTC),
         tags=tags or {},
         region=region,
         account_id=account_id,
@@ -172,8 +171,8 @@ def create_test_security_group(
 def test_scope_enforcer_rejects_cross_account_resources(
     current_account: str,
     current_region: str,
-    other_accounts: List[str],
-    other_regions: List[str],
+    other_accounts: list[str],
+    other_regions: list[str],
     instance_id: str,
 ):
     """
@@ -207,9 +206,7 @@ def test_scope_enforcer_rejects_cross_account_resources(
             region=current_region,  # Same region, different account
             account_id=other_account,
         )
-        assert (
-            not in_scope
-        ), f"Resource from account {other_account} should NOT be in scope"
+        assert not in_scope, f"Resource from account {other_account} should NOT be in scope"
         assert len(reasons) > 0, "Exclusion reason should be provided"
 
 
@@ -223,7 +220,7 @@ def test_scope_enforcer_rejects_cross_account_resources(
 def test_scope_enforcer_rejects_cross_region_resources(
     current_account: str,
     current_region: str,
-    other_regions: List[str],
+    other_regions: list[str],
     instance_id: str,
 ):
     """
@@ -257,9 +254,7 @@ def test_scope_enforcer_rejects_cross_region_resources(
             region=other_region,  # Different region, same account
             account_id=current_account,
         )
-        assert (
-            not in_scope
-        ), f"Resource from region {other_region} should NOT be in scope"
+        assert not in_scope, f"Resource from region {other_region} should NOT be in scope"
         assert len(reasons) > 0, "Exclusion reason should be provided"
 
 
@@ -322,9 +317,9 @@ def test_enforce_scope_filters_out_cross_account_instances(
 
     # Verify all remaining instances are from current account
     for instance in filtered.instances:
-        assert (
-            instance.account_id == current_account
-        ), f"Instance {instance.resource_id} from account {instance.account_id} should not be in filtered results"
+        assert instance.account_id == current_account, (
+            f"Instance {instance.resource_id} from account {instance.account_id} should not be in filtered results"
+        )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -340,7 +335,7 @@ def test_enforce_scope_filters_out_cross_region_instances(
     current_region: str,
     num_same_region_instances: int,
     num_other_region_instances: int,
-    other_regions: List[str],
+    other_regions: list[str],
 ):
     """
     Feature: packer-resource-reaper, Property 9: Single Account/Region Boundary
@@ -392,9 +387,9 @@ def test_enforce_scope_filters_out_cross_region_instances(
 
     # Verify all remaining instances are from current region
     for instance in filtered.instances:
-        assert (
-            instance.region == current_region
-        ), f"Instance {instance.resource_id} from region {instance.region} should not be in filtered results"
+        assert instance.region == current_region, (
+            f"Instance {instance.resource_id} from region {instance.region} should not be in filtered results"
+        )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -598,12 +593,12 @@ def test_all_filtered_resources_have_same_account_and_region(
 
     # ALL remaining resources must have the exact same account and region
     for instance in filtered.instances:
-        assert (
-            instance.account_id == current_account
-        ), f"Instance {instance.resource_id} has wrong account {instance.account_id}"
-        assert (
-            instance.region == current_region
-        ), f"Instance {instance.resource_id} has wrong region {instance.region}"
+        assert instance.account_id == current_account, (
+            f"Instance {instance.resource_id} has wrong account {instance.account_id}"
+        )
+        assert instance.region == current_region, (
+            f"Instance {instance.resource_id} has wrong region {instance.region}"
+        )
 
 
 @settings(max_examples=100, deadline=5000)
@@ -632,9 +627,7 @@ def test_empty_resource_collection_remains_empty_after_scope_enforcement(
 
     filtered = enforce_scope(resources, scope_enforcer)
 
-    assert (
-        filtered.is_empty()
-    ), "Empty collection should remain empty after scope enforcement"
+    assert filtered.is_empty(), "Empty collection should remain empty after scope enforcement"
     assert filtered.total_count() == 0
 
 

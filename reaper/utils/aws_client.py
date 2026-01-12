@@ -3,7 +3,8 @@
 import logging
 import random
 import time
-from typing import Any, Callable, Optional, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 import boto3
 from botocore.config import Config
@@ -29,11 +30,9 @@ class RetryStrategy:
         self.max_delay = max_delay
         self.jitter = jitter
 
-    def execute_with_retry(
-        self, operation: Callable[..., T], *args: Any, **kwargs: Any
-    ) -> T:
+    def execute_with_retry(self, operation: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         """Execute operation with exponential backoff retry."""
-        last_exception: Optional[Exception] = None
+        last_exception: Exception | None = None
 
         for attempt in range(self.max_retries + 1):
             try:
@@ -72,7 +71,7 @@ class RetryStrategy:
 
     def _calculate_delay(self, attempt: int) -> float:
         """Calculate delay with exponential backoff and optional jitter."""
-        delay = min(self.base_delay * (2**attempt), self.max_delay)
+        delay: float = min(self.base_delay * (2**attempt), self.max_delay)
         if self.jitter:
             delay *= 0.5 + random.random() * 0.5
         return delay
@@ -84,14 +83,14 @@ class AWSClientManager:
     def __init__(
         self,
         region: str = "us-east-1",
-        role_arn: Optional[str] = None,
-        retry_strategy: Optional[RetryStrategy] = None,
+        role_arn: str | None = None,
+        retry_strategy: RetryStrategy | None = None,
     ):
         self.region = region
         self.role_arn = role_arn
         self.retry_strategy = retry_strategy or RetryStrategy()
-        self._session: Optional[boto3.Session] = None
-        self._clients: dict = {}
+        self._session: boto3.Session | None = None
+        self._clients: dict[str, Any] = {}
 
     def _get_session(self) -> boto3.Session:
         """Get or create boto3 session, with role assumption if configured."""
@@ -124,7 +123,9 @@ class AWSClientManager:
             session = self._get_session()
             config = Config(retries={"max_attempts": 0})  # We handle retries ourselves
             self._clients[service_name] = session.client(
-                service_name, config=config, region_name=self.region
+                service_name,
+                config=config,
+                region_name=self.region,  # type: ignore[call-overload]
             )
         return self._clients[service_name]
 
@@ -151,4 +152,5 @@ class AWSClientManager:
     def get_account_id(self) -> str:
         """Get current AWS account ID."""
         response = self.sts.get_caller_identity()
-        return response["Account"]
+        account_id: str = response["Account"]
+        return account_id
