@@ -1,5 +1,8 @@
 # AWS Packer Resource Reaper
 
+[![PR Check](https://github.com/hche608/packer-resource-reaper/actions/workflows/pr-check.yml/badge.svg)](https://github.com/hche608/packer-resource-reaper/actions/workflows/pr-check.yml)
+[![CodeQL](https://github.com/hche608/packer-resource-reaper/actions/workflows/codeql.yml/badge.svg)](https://github.com/hche608/packer-resource-reaper/actions/workflows/codeql.yml)
+
 A serverless application that automatically identifies and cleans up "zombie" EC2 instances and associated resources left behind by failed or interrupted Packer builds. The system operates as an external watchdog within a single AWS account and region, providing a simple, stateless cleanup mechanism.
 
 ## ⚠️ Important Warning
