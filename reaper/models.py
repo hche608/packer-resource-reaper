@@ -130,7 +130,7 @@ class ResourceCollection:
     security_groups: list[PackerSecurityGroup] = field(default_factory=list)
     key_pairs: list[PackerKeyPair] = field(default_factory=list)
     elastic_ips: list[PackerElasticIP] = field(default_factory=list)
-    instance_profiles: list["PackerInstanceProfile"] = field(default_factory=list)
+    instance_profiles: list[PackerInstanceProfile] = field(default_factory=list)
 
     def is_empty(self) -> bool:
         """Check if the collection has no resources."""

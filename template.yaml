@@ -118,7 +118,7 @@ Globals:
   Function:
     Timeout: 300
     MemorySize: 256
-    Runtime: python3.11
+    Runtime: python3.14
     Architectures:
       - arm64
 

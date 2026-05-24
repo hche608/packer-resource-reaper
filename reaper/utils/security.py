@@ -52,12 +52,12 @@ class ValidationResult:
     sanitized_value: Any | None = None
 
     @classmethod
-    def valid(cls, sanitized_value: Any = None) -> "ValidationResult":
+    def valid(cls, sanitized_value: Any = None) -> ValidationResult:
         """Create a valid result."""
         return cls(is_valid=True, errors=[], sanitized_value=sanitized_value)
 
     @classmethod
-    def invalid(cls, errors: list[str]) -> "ValidationResult":
+    def invalid(cls, errors: list[str]) -> ValidationResult:
         """Create an invalid result."""
         return cls(is_valid=False, errors=errors)
 
