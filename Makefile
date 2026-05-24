@@ -109,7 +109,7 @@ test-safety:
 # SAM Local Development
 # =============================================================================
 
-build:
+build: clean
 	uv export --format requirements-txt --no-hashes --no-editable --output-file requirements.txt
 	sam build
 
