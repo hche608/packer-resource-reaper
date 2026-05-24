@@ -146,25 +146,6 @@ Resources:
         - Key: ManagedBy
           Value: SAM
 
-  # SNS Topic Policy - restrict publishing to Lambda function only
-  NotificationTopicPolicy:
-    Type: AWS::SNS::TopicPolicy
-    Properties:
-      Topics:
-        - !Ref NotificationTopic
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: AllowLambdaPublish
-            Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sns:Publish
-            Resource: !Ref NotificationTopic
-            Condition:
-              ArnLike:
-                aws:SourceArn: !GetAtt ReaperFunction.Arn
-
   # Email subscription (if provided)
   EmailSubscription:
     Type: AWS::SNS::Subscription
