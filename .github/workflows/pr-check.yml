@@ -20,11 +20,14 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install Python
+      - name: Install Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
+      - name: Override python version
+        run: echo "${{ matrix.python-version }}" > .python-version
+
       - name: Install dependencies
-        run: uv sync --all-extras --python ${{ matrix.python-version }}
+        run: uv sync --all-extras
 
       - name: Lint (includes bandit security rules)
         run: uv run ruff check .
