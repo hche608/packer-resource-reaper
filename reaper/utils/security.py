@@ -7,6 +7,8 @@ configured scope.
 Requirements: 6.2, 6.5
 """
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass
 from typing import Any

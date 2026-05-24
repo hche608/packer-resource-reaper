@@ -11,6 +11,8 @@ Key configuration options:
 - BATCH_DELETE_SIZE: Batch size for concurrent deletions (Requirements 12.1, 12.2, 12.7)
 """
 
+from __future__ import annotations
+
 import logging
 import os
 from dataclasses import dataclass
