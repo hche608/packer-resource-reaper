@@ -2,6 +2,11 @@
 
 [![PR Check](https://github.com/hche608/packer-resource-reaper/actions/workflows/pr-check.yml/badge.svg)](https://github.com/hche608/packer-resource-reaper/actions/workflows/pr-check.yml)
 [![CodeQL](https://github.com/hche608/packer-resource-reaper/actions/workflows/codeql.yml/badge.svg)](https://github.com/hche608/packer-resource-reaper/actions/workflows/codeql.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Coverage: 96%](https://img.shields.io/badge/coverage-96%25-brightgreen.svg)](https://github.com/hche608/packer-resource-reaper)
+[![AWS SAM](https://img.shields.io/badge/AWS-SAM-orange.svg)](https://aws.amazon.com/serverless/sam/)
 
 A serverless application that automatically identifies and cleans up "zombie" EC2 instances and associated resources left behind by failed or interrupted Packer builds. The system operates as an external watchdog within a single AWS account and region, providing a simple, stateless cleanup mechanism.
 
