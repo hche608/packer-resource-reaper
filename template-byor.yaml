@@ -20,7 +20,7 @@ Metadata:
     ReadmeUrl: SAR-README-BYOR.md
     HomePageUrl: https://github.com/hche608/packer-resource-reaper
     SourceCodeUrl: https://github.com/hche608/packer-resource-reaper
-    SemanticVersion: 2.0.0
+    SemanticVersion: 2.0.1
     Labels:
       - packer
       - ec2
