@@ -11,10 +11,11 @@ Key configuration options:
 - BATCH_DELETE_SIZE: Batch size for concurrent deletions (Requirements 12.1, 12.2, 12.7)
 """
 
+from __future__ import annotations
+
 import logging
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 # Valid log levels as per Requirement 11.1
 VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
@@ -60,7 +61,7 @@ class ReaperConfig:
     batch_delete_size: int = 1
 
     @classmethod
-    def from_environment(cls, validate: bool = True) -> "ReaperConfig":
+    def from_environment(cls, validate: bool = True) -> ReaperConfig:
         """Create configuration from environment variables.
 
         This implements Requirement 5.2: configuration via environment variables.
@@ -225,7 +226,7 @@ class ReaperConfig:
         return self.batch_delete_size
 
 
-def configure_logging(config: Optional["ReaperConfig"] = None) -> logging.Logger:
+def configure_logging(config: ReaperConfig | None = None) -> logging.Logger:
     """Configure logging based on LOG_LEVEL environment variable or config.
 
     This implements Requirements 11.1, 11.2, 11.5:

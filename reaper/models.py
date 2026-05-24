@@ -1,5 +1,7 @@
 """Data models for AWS Packer Resource Reaper."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -130,7 +132,7 @@ class ResourceCollection:
     security_groups: list[PackerSecurityGroup] = field(default_factory=list)
     key_pairs: list[PackerKeyPair] = field(default_factory=list)
     elastic_ips: list[PackerElasticIP] = field(default_factory=list)
-    instance_profiles: list["PackerInstanceProfile"] = field(default_factory=list)
+    instance_profiles: list[PackerInstanceProfile] = field(default_factory=list)
 
     def is_empty(self) -> bool:
         """Check if the collection has no resources."""
