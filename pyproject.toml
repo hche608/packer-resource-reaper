@@ -64,22 +64,15 @@ target-version = "py311"
 select = ["E", "F", "I", "W", "UP", "B", "SIM", "S", "N", "C90"]
 ignore = [
     "E501",   # Line length handled by formatter
-    "S311",   # random.random() is fine for jitter, not crypto
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = [
-    "S101",  # Allow asserts in tests
-    "S105",  # Allow hardcoded passwords in test assertions
-    "S106",  # Allow hardcoded password arguments in test mocks
-    "N803",  # Allow uppercase AWS API parameter names (InstanceIds, etc.)
-    "SIM102", # Allow nested if statements for readability
-    "SIM103", # Allow explicit if/return patterns
-    "SIM108", # Allow if/else over ternary for clarity
-    "SIM116", # Allow if/elif chains over dict dispatch
-    "SIM117", # Allow nested with statements
-    "B007",  # Allow unused loop variables
-    "C901",  # Allow complex test helper functions
+    "S101",   # Allow asserts in tests (pytest requirement)
+    "N803",   # Allow uppercase AWS API parameter names in mocks (InstanceIds, GroupId, etc.)
+    "SIM117", # Allow nested with statements (patch.dict + patch patterns)
+    "SIM116", # Allow if/elif for paginator dispatch in test helpers
+    "C901",   # Allow complex test helper functions (mock setup)
 ]
 
 [tool.ruff.lint.mccabe]

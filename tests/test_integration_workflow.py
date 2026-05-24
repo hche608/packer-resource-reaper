@@ -44,10 +44,7 @@ def create_packer_instance(
 ) -> PackerInstance:
     """Create a PackerInstance for testing."""
     launch_time = datetime.now(UTC) - timedelta(hours=age_hours)
-    if include_packer_tags:
-        default_tags = {"Name": "Packer Builder", "packer": "true"}
-    else:
-        default_tags = {}
+    default_tags = {"Name": "Packer Builder", "packer": "true"} if include_packer_tags else {}
     if tags:
         default_tags.update(tags)
 

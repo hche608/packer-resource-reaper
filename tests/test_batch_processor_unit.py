@@ -115,9 +115,7 @@ class TestBatchProcessor:
         processor = BatchProcessor(batch_size=3)
 
         def delete_func(resource_id):
-            if resource_id == "r-002":
-                return False
-            return True
+            return resource_id != "r-002"
 
         result = processor.process_deletions(["r-001", "r-002", "r-003"], delete_func, "resource")
 

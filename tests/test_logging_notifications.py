@@ -516,7 +516,7 @@ def test_notification_includes_errors(
     assert "error" in subject.lower(), "Subject should mention errors"
 
     # Verify error details are in the message
-    for resource_id, error_msg in errors.items():
+    for resource_id, _error_msg in errors.items():
         assert resource_id in message, f"Error resource {resource_id} should be in notification"
 
 
@@ -730,7 +730,7 @@ def test_notification_includes_instance_type(
     message = mock_sns.published_messages[0]["Message"]
 
     # Verify all instance types are in the message (Requirement 4.3)
-    for i, instance in enumerate(instances):
+    for _i, instance in enumerate(instances):
         assert instance.instance_type in message, (
             f"Instance type {instance.instance_type} should be in notification"
         )

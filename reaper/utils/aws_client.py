@@ -1,7 +1,7 @@
 """AWS client management for Packer Resource Reaper."""
 
 import logging
-import random
+import secrets
 import time
 from collections.abc import Callable
 from typing import Any, TypeVar
@@ -73,7 +73,8 @@ class RetryStrategy:
         """Calculate delay with exponential backoff and optional jitter."""
         delay: float = min(self.base_delay * (2**attempt), self.max_delay)
         if self.jitter:
-            delay *= 0.5 + random.random() * 0.5
+            # Use secrets for secure randomness (satisfies S311)
+            delay *= 0.5 + (secrets.randbelow(1000) / 1000.0) * 0.5
         return delay
 
 

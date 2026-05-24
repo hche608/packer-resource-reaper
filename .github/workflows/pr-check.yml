@@ -26,8 +26,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --python ${{ matrix.python-version }}
 
-      - name: Lint (includes security/bandit rules)
+      - name: Lint (includes bandit security rules)
         run: uv run ruff check .
+
+      - name: Security audit (all S rules, zero tolerance)
+        run: uv run ruff check . --select S --per-file-ignores "tests/*:S101"
 
       - name: Format check
         run: uv run ruff format --check .
