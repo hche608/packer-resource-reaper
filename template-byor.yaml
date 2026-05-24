@@ -1,25 +1,26 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  AWS Packer Resource Reaper - Serverless zombie resource cleanup.
+  AWS Packer Resource Reaper (BYOR - Bring Your Own Role) - Serverless zombie resource cleanup.
   Identifies and cleans up EC2 instances and associated resources left behind by failed Packer builds.
+  This variant requires a pre-created IAM role ARN - no IAM capabilities needed for deployment.
   WARNING: Instances are detected by SSH key name pattern "packer_*". Do NOT use if you have
   non-Packer instances using similar key naming patterns.
 
 Metadata:
   AWS::ServerlessRepo::Application:
-    Name: packer-resource-reaper
+    Name: packer-resource-reaper-byor
     Description: >
-      Automatically clean up zombie EC2 instances and associated resources
-      (security groups, key pairs, volumes, EIPs) left behind by failed Packer builds.
+      Clean up zombie EC2 instances and resources from failed Packer builds.
       Identifies resources by SSH key name pattern and age threshold.
+      BYOR variant - supply your own IAM role. No CAPABILITY_IAM required.
     Author: DevOps Team
     SpdxLicenseId: MIT
     LicenseUrl: LICENSE
-    ReadmeUrl: SAR-README.md
+    ReadmeUrl: SAR-README-BYOR.md
     HomePageUrl: https://github.com/hche608/packer-resource-reaper
     SourceCodeUrl: https://github.com/hche608/packer-resource-reaper
-    SemanticVersion: 2.0.0
+    SemanticVersion: 2.0.1
     Labels:
       - packer
       - ec2
@@ -27,8 +28,18 @@ Metadata:
       - serverless
       - lambda
       - cost-optimization
+      - byor
+      - enterprise
 
 Parameters:
+  LambdaRoleArn:
+    Type: String
+    Description: >
+      ARN of a pre-created IAM role for the Lambda function.
+      The role must have permissions for EC2 describe/terminate/delete,
+      IAM list/delete, SNS publish, STS get-caller-identity, and CloudWatch Logs.
+      See README for the required IAM policy.
+
   MaxInstanceAgeHours:
     Type: Number
     Default: 2
@@ -135,25 +146,6 @@ Resources:
         - Key: ManagedBy
           Value: SAM
 
-  # SNS Topic Policy - restrict publishing to Lambda function only
-  NotificationTopicPolicy:
-    Type: AWS::SNS::TopicPolicy
-    Properties:
-      Topics:
-        - !Ref NotificationTopic
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: AllowLambdaPublish
-            Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sns:Publish
-            Resource: !Ref NotificationTopic
-            Condition:
-              ArnLike:
-                aws:SourceArn: !GetAtt ReaperFunction.Arn
-
   # Email subscription (if provided)
   EmailSubscription:
     Type: AWS::SNS::Subscription
@@ -163,171 +155,7 @@ Resources:
       Protocol: email
       Endpoint: !Ref NotificationEmail
 
-  # IAM Role for Lambda function with least privilege permissions
-  ReaperFunctionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub '${AWS::StackName}-lambda-role'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      Tags:
-        - Key: Application
-          Value: PackerResourceReaper
-
-  # IAM Policy for EC2 read operations (scanning)
-  EC2ReadPolicy:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: !Sub '${AWS::StackName}-ec2-read'
-      Roles:
-        - !Ref ReaperFunctionRole
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: EC2DescribePermissions
-            Effect: Allow
-            Action:
-              - ec2:DescribeInstances
-              - ec2:DescribeVolumes
-              - ec2:DescribeSnapshots
-              - ec2:DescribeSecurityGroups
-              - ec2:DescribeKeyPairs
-              - ec2:DescribeAddresses
-              - ec2:DescribeNetworkInterfaces
-              - ec2:DescribeImages
-            Resource: '*'
-
-  # IAM Policy for EC2 cleanup operations (destructive)
-  EC2CleanupPolicy:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: !Sub '${AWS::StackName}-ec2-cleanup'
-      Roles:
-        - !Ref ReaperFunctionRole
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: TerminateInstances
-            Effect: Allow
-            Action:
-              - ec2:TerminateInstances
-            Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
-          - Sid: DeleteSecurityGroups
-            Effect: Allow
-            Action:
-              - ec2:DeleteSecurityGroup
-            Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*'
-          - Sid: DeleteKeyPairs
-            Effect: Allow
-            Action:
-              - ec2:DeleteKeyPair
-            Resource: '*'
-          - Sid: DeleteVolumes
-            Effect: Allow
-            Action:
-              - ec2:DeleteVolume
-            Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:volume/*'
-          - Sid: DeleteSnapshots
-            Effect: Allow
-            Action:
-              - ec2:DeleteSnapshot
-            Resource: !Sub 'arn:aws:ec2:${AWS::Region}::snapshot/*'
-          - Sid: ReleaseElasticIPs
-            Effect: Allow
-            Action:
-              - ec2:ReleaseAddress
-            Resource: '*'
-
-  # IAM Policy for SNS notifications
-  SNSPublishPolicy:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: !Sub '${AWS::StackName}-sns-publish'
-      Roles:
-        - !Ref ReaperFunctionRole
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: PublishNotifications
-            Effect: Allow
-            Action:
-              - sns:Publish
-            Resource: !Ref NotificationTopic
-
-  # IAM Policy for CloudWatch Logs
-  CloudWatchLogsPolicy:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: !Sub '${AWS::StackName}-cloudwatch-logs'
-      Roles:
-        - !Ref ReaperFunctionRole
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: CreateLogStreams
-            Effect: Allow
-            Action:
-              - logs:CreateLogStream
-              - logs:PutLogEvents
-            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-function:*'
-
-  # IAM Policy for STS operations (get caller identity)
-  STSPolicy:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: !Sub '${AWS::StackName}-sts'
-      Roles:
-        - !Ref ReaperFunctionRole
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: GetCallerIdentity
-            Effect: Allow
-            Action:
-              - sts:GetCallerIdentity
-            Resource: '*'
-
-  # IAM Policy for orphaned IAM role cleanup
-  IAMCleanupPolicy:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: !Sub '${AWS::StackName}-iam-cleanup'
-      Roles:
-        - !Ref ReaperFunctionRole
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: IAMReadPermissions
-            Effect: Allow
-            Action:
-              - iam:ListRoles
-              - iam:ListInstanceProfiles
-              - iam:ListInstanceProfilesForRole
-              - iam:ListAttachedRolePolicies
-              - iam:ListRolePolicies
-            Resource: '*'
-          - Sid: IAMCleanupPermissions
-            Effect: Allow
-            Action:
-              - iam:RemoveRoleFromInstanceProfile
-              - iam:DetachRolePolicy
-              - iam:DeleteRolePolicy
-              - iam:DeleteRole
-            Resource:
-              - !Sub 'arn:aws:iam::${AWS::AccountId}:role/packer_*'
-              - !Sub 'arn:aws:iam::${AWS::AccountId}:role/packer-*'
-          - Sid: IAMInstanceProfileCleanup
-            Effect: Allow
-            Action:
-              - iam:RemoveRoleFromInstanceProfile
-            Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:instance-profile/*'
-
-  # Lambda function - stateless, single account/region
+  # Lambda function using the provided IAM role (BYOR)
   ReaperFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -337,7 +165,7 @@ Resources:
         Stateless execution - performs fresh scan each run.
       CodeUri: .
       Handler: reaper.handler.lambda_handler
-      Role: !GetAtt ReaperFunctionRole.Arn
+      Role: !Ref LambdaRoleArn
       ReservedConcurrentExecutions: 1
       Environment:
         Variables:
@@ -429,10 +257,6 @@ Outputs:
   LogGroupName:
     Description: Name of the CloudWatch Log Group
     Value: !Ref ReaperLogGroup
-
-  LambdaRoleArn:
-    Description: ARN of the Lambda execution role
-    Value: !GetAtt ReaperFunctionRole.Arn
 
   ScheduleExpression:
     Description: The configured schedule expression

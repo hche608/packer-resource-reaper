@@ -50,6 +50,8 @@ Automatically clean up zombie EC2 instances and associated resources left behind
 
 [GitHub Repository](https://github.com/hche608/packer-resource-reaper)
 
+> **Enterprise users:** If your organization requires pre-created IAM roles, see the [BYOR (Bring Your Own Role) variant](https://github.com/hche608/packer-resource-reaper) which requires no IAM capabilities for deployment.
+
 ## License
 
 MIT
