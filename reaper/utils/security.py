@@ -426,7 +426,8 @@ class LogSanitizer:
         (re.compile(r"(?i)secret\s*[=:]\s*\S+"), "secret=[REDACTED]"),
         (re.compile(r"(?i)token\s*[=:]\s*\S+"), "token=[REDACTED]"),
         (re.compile(r"(?i)api[_-]?key\s*[=:]\s*\S+"), "api_key=[REDACTED]"),
-        (re.compile(r"[a-zA-Z0-9+/]{40}"), "[REDACTED_SECRET]"),  # Base64 secrets
+        # AWS secret access keys: exactly 40 chars of base64 with + and /
+        (re.compile(r"(?<![a-zA-Z0-9/+])[a-zA-Z0-9/+]{40}(?![a-zA-Z0-9/+=])"), "[REDACTED_SECRET]"),
     ]
 
     @classmethod

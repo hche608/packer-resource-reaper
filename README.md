@@ -482,7 +482,7 @@ Both criteria must be met for an instance to be selected for cleanup.
 ## Architecture
 
 ```
-┌─────────────────┐     ┌─────────────────┐
+┌─────────────────┐     ┌──────────────────┐
 │   EventBridge   │────▶│  Lambda Function │
 │   (Scheduler)   │     │   (Reaper)       │
 └─────────────────┘     └────────┬─────────┘

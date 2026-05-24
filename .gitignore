@@ -390,3 +390,4 @@ env.local.json
 .kiro/settings/
 
 .vscode/
+packaged.yaml

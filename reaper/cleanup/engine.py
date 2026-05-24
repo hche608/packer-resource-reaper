@@ -21,6 +21,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
+from botocore.exceptions import ClientError
+
 from reaper.cleanup.batch_processor import BatchProcessor
 from reaper.cleanup.dry_run import DryRunExecutor, DryRunReport
 from reaper.cleanup.ec2_manager import EC2Manager
@@ -41,6 +43,9 @@ from reaper.utils.aws_client import RetryStrategy
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
+
+# Error code indicating a resource still has dependencies
+_DEPENDENCY_VIOLATION = "DependencyViolation"
 
 
 @dataclass
@@ -149,27 +154,19 @@ class CleanupEngine:
         Two-Phase Cleanup Model (per Requirements 2.1-2.8 and 10.7):
 
         Phase 1 - Primary Zombie Instance Cleanup:
-        1. Identify zombie instances (already filtered in resources)
-        2. Collect directly associated resources for each instance
-        3. Terminate EC2 instances
-        4. Wait for instance termination confirmation
-        5. Delete security groups (handle DependencyViolation gracefully)
-        6. Delete key pairs
-        7. Release elastic IPs
-        8. Delete EBS volumes
-        9. Delete EBS snapshots
-        10. Delete IAM instance profiles (with role detachment)
+        1. Terminate EC2 instances and wait for confirmation
+        2. Delete security groups (handle DependencyViolation gracefully)
+        3. Delete key pairs
+        4. Release elastic IPs
+        5. Delete EBS volumes and snapshots
+        6. Delete IAM instance profiles (with role detachment)
 
         Phase 2 - Orphaned Resource Cleanup (Requirement 10.7):
-        11. Scan for orphaned Packer key pairs (not used by any instance)
-        12. Scan for orphaned Packer security groups (no attachments)
-        13. Scan for orphaned Packer IAM roles (not in any instance profile)
-        14. Delete orphaned resources
+        7. Scan and delete orphaned Packer key pairs, security groups, IAM roles
 
         In dry-run mode (Requirements 9.1-9.4, 10.8):
         - Identifies all cleanup candidates without executing destructive operations
         - Logs all resources that would be deleted to CloudWatch
-        - Generates simulation reports for SNS notifications
         - Does NOT execute any terminate, delete, or release API calls
 
         Args:
@@ -178,61 +175,58 @@ class CleanupEngine:
         Returns:
             CleanupResult with details of operations performed
         """
-        # In dry-run mode, use the DryRunExecutor for comprehensive logging
-        # This implements Requirements 9.1, 9.2, 9.3, 9.4, 10.8
         if self.dry_run:
-            result, report = self.dry_run_executor.execute_dry_run(resources)
-            # Store the report for potential SNS notification
-            self._last_dry_run_report = report
+            return self._execute_dry_run(resources)
 
-            # Also scan for orphaned resources in dry-run mode
-            orphaned = self.orphan_manager.scan_orphaned_resources()
-            orphan_result = self.orphan_manager.cleanup_orphaned_resources(orphaned)
-            self._last_orphan_cleanup_result = orphan_result
+        return self._execute_live_cleanup(resources)
 
-            # Merge orphan results into main result
-            self._merge_orphan_results(result, orphan_result)
+    def get_last_orphan_cleanup_result(self) -> OrphanCleanupResult | None:
+        """Get the last orphan cleanup result for SNS notifications (Requirement 10.10)."""
+        return self._last_orphan_cleanup_result
 
-            return result
+    def get_last_dry_run_report(self) -> DryRunReport | None:
+        """Get the last dry-run report for SNS notifications (Requirement 9.3)."""
+        return getattr(self, "_last_dry_run_report", None)
 
-        result = CleanupResult(dry_run=self.dry_run)
+    # -------------------------------------------------------------------------
+    # Execution modes
+    # -------------------------------------------------------------------------
 
+    def _execute_dry_run(self, resources: ResourceCollection) -> CleanupResult:
+        """Execute cleanup in dry-run mode (Requirements 9.1-9.4, 10.8)."""
+        result, report = self.dry_run_executor.execute_dry_run(resources)
+        self._last_dry_run_report = report
+
+        # Also scan for orphaned resources in dry-run mode
+        orphaned = self.orphan_manager.scan_orphaned_resources()
+        orphan_result = self.orphan_manager.cleanup_orphaned_resources(orphaned)
+        self._last_orphan_cleanup_result = orphan_result
+        self._merge_orphan_results(result, orphan_result)
+
+        return result
+
+    def _execute_live_cleanup(self, resources: ResourceCollection) -> CleanupResult:
+        """Execute live cleanup in two phases."""
+        result = CleanupResult(dry_run=False)
+
+        # Phase 1: Primary zombie instance cleanup
         if resources.is_empty():
             logger.info("No resources to clean up in Phase 1")
         else:
             logger.info(f"Phase 1: Starting cleanup of {resources.total_count()} resources")
 
-            # Step 1 & 2: Process instances - collect associated resources and terminate
-            # This implements Requirements 2.1, 2.2, 2.3, 2.5, 2.7
             if resources.instances:
                 self._cleanup_instances_with_dependencies(resources, result)
-
-            # Step 3: Delete security groups (may fail if instances still terminating)
-            # This implements Requirement 2.4, 2.6
             if resources.security_groups:
                 self._cleanup_security_groups(resources, result)
-
-            # Step 4: Delete key pairs
-            # This implements Requirement 2.4
             if resources.key_pairs:
                 self._cleanup_key_pairs(resources, result)
-
-            # Step 5: Release elastic IPs
-            # This implements Requirement 2.4
             if resources.elastic_ips:
                 self._cleanup_elastic_ips(resources, result)
-
-            # Step 6: Delete volumes
-            # This implements Requirement 2.4, 2.8
             if resources.volumes:
                 self._cleanup_volumes(resources, result)
-
-            # Step 7: Delete snapshots
             if resources.snapshots:
                 self._cleanup_snapshots(resources, result)
-
-            # Step 8: Delete IAM instance profiles
-            # This implements Requirement 2.4 for IAM instance profiles
             if resources.instance_profiles:
                 self._cleanup_instance_profiles(resources, result)
 
@@ -246,8 +240,6 @@ class CleanupEngine:
         orphaned = self.orphan_manager.scan_orphaned_resources()
         orphan_result = self.orphan_manager.cleanup_orphaned_resources(orphaned)
         self._last_orphan_cleanup_result = orphan_result
-
-        # Merge orphan results into main result
         self._merge_orphan_results(result, orphan_result)
 
         logger.info(
@@ -257,59 +249,241 @@ class CleanupEngine:
 
         return result
 
+    # -------------------------------------------------------------------------
+    # Resource cleanup methods
+    # -------------------------------------------------------------------------
+
+    def _cleanup_instances_with_dependencies(
+        self, resources: ResourceCollection, result: CleanupResult
+    ) -> None:
+        """Terminate EC2 instances with dependency-aware handling (Requirements 2.1-2.7)."""
+        logger.info(f"Processing {len(resources.instances)} instances")
+
+        instances_to_terminate = []
+
+        for instance in resources.instances:
+            if self._should_defer_instance(instance):
+                logger.info(
+                    f"Instance {instance.resource_id} in shutting-down state, "
+                    "deferring to next execution"
+                )
+                result.deferred_resources.append(instance.resource_id)
+            elif instance.state.lower() == self.TERMINATED_STATE:
+                logger.info(f"Instance {instance.resource_id} already terminated")
+                result.terminated_instances.append(instance.resource_id)
+            else:
+                instances_to_terminate.append(instance)
+
+        if not instances_to_terminate:
+            logger.info("No instances to terminate")
+            return
+
+        terminated, deferred, errors = self.ec2_manager.terminate_instances(instances_to_terminate)
+        result.terminated_instances.extend(terminated)
+        result.deferred_resources.extend(deferred)
+        result.errors.update(errors)
+
+        # Wait for termination confirmation (Requirement 2.5)
+        if terminated:
+            logger.info("Waiting for instance termination confirmation...")
+            self.ec2_manager.wait_for_termination(terminated, timeout_seconds=120)
+
+    def _cleanup_security_groups(
+        self, resources: ResourceCollection, result: CleanupResult
+    ) -> None:
+        """Delete security groups, using batch processor when configured."""
+        logger.info(f"Deleting {len(resources.security_groups)} security groups")
+
+        if self._should_use_batch(len(resources.security_groups)):
+            sg_ids = [sg.resource_id for sg in resources.security_groups]
+            batch_result = self.batch_processor.process_deletions(
+                resources=sg_ids,
+                delete_func=self._make_sg_deleter(),
+                resource_type="security_group",
+            )
+            result.deleted_security_groups.extend(batch_result.successful)
+            # Separate DependencyViolation errors into deferred
+            for resource_id, error_msg in list(batch_result.errors.items()):
+                if _DEPENDENCY_VIOLATION in error_msg:
+                    result.deferred_resources.append(resource_id)
+                else:
+                    result.errors[resource_id] = error_msg
+        else:
+            deleted, deferred, errors = self.network_manager.delete_security_groups(
+                resources.security_groups
+            )
+            result.deleted_security_groups.extend(deleted)
+            result.deferred_resources.extend(deferred)
+            result.errors.update(errors)
+
+    def _cleanup_key_pairs(self, resources: ResourceCollection, result: CleanupResult) -> None:
+        """Delete key pairs, using batch processor when configured."""
+        logger.info(f"Deleting {len(resources.key_pairs)} key pairs")
+
+        if self._should_use_batch(len(resources.key_pairs)):
+            key_names = [kp.key_name for kp in resources.key_pairs]
+            batch_result = self.batch_processor.process_deletions(
+                resources=key_names,
+                delete_func=self._make_key_pair_deleter(),
+                resource_type="key_pair",
+            )
+            result.deleted_key_pairs.extend(batch_result.successful)
+            result.errors.update(batch_result.errors)
+        else:
+            deleted, deferred, errors = self.network_manager.delete_key_pairs(resources.key_pairs)
+            result.deleted_key_pairs.extend(deleted)
+            result.deferred_resources.extend(deferred)
+            result.errors.update(errors)
+
+    def _cleanup_elastic_ips(self, resources: ResourceCollection, result: CleanupResult) -> None:
+        """Release elastic IPs."""
+        logger.info(f"Releasing {len(resources.elastic_ips)} elastic IPs")
+
+        released, deferred, errors = self.network_manager.release_elastic_ips(resources.elastic_ips)
+        result.released_elastic_ips.extend(released)
+        result.deferred_resources.extend(deferred)
+        result.errors.update(errors)
+
+    def _cleanup_volumes(self, resources: ResourceCollection, result: CleanupResult) -> None:
+        """Delete EBS volumes, using batch processor when configured."""
+        logger.info(f"Deleting {len(resources.volumes)} volumes")
+
+        if self._should_use_batch(len(resources.volumes)):
+            # Pre-filter: only attempt deletion on available, unattached volumes
+            deletable_ids = []
+            for volume in resources.volumes:
+                if volume.attached_instance or volume.state != "available":
+                    result.deferred_resources.append(volume.resource_id)
+                else:
+                    deletable_ids.append(volume.resource_id)
+
+            if deletable_ids:
+                batch_result = self.batch_processor.process_deletions(
+                    resources=deletable_ids,
+                    delete_func=self._make_volume_deleter(),
+                    resource_type="volume",
+                )
+                result.deleted_volumes.extend(batch_result.successful)
+                result.errors.update(batch_result.errors)
+        else:
+            deleted, deferred, errors = self.storage_manager.delete_volumes(resources.volumes)
+            result.deleted_volumes.extend(deleted)
+            result.deferred_resources.extend(deferred)
+            result.errors.update(errors)
+
+    def _cleanup_snapshots(self, resources: ResourceCollection, result: CleanupResult) -> None:
+        """Delete EBS snapshots, protecting those used by registered AMIs."""
+        logger.info(f"Deleting {len(resources.snapshots)} snapshots")
+
+        registered_snapshots = self.storage_manager.get_registered_ami_snapshots()
+        deleted, deferred, errors = self.storage_manager.delete_snapshots(
+            resources.snapshots, registered_snapshots
+        )
+        result.deleted_snapshots.extend(deleted)
+        result.deferred_resources.extend(deferred)
+        result.errors.update(errors)
+
+    def _cleanup_instance_profiles(
+        self, resources: ResourceCollection, result: CleanupResult
+    ) -> None:
+        """Delete IAM instance profiles with role detachment (Requirement 2.4)."""
+        logger.info(f"Deleting {len(resources.instance_profiles)} instance profiles")
+
+        if not self.iam_manager:
+            logger.warning("IAM manager not initialized, skipping instance profile cleanup")
+            return
+
+        deleted, deferred, errors = self.iam_manager.delete_instance_profiles(
+            resources.instance_profiles
+        )
+        result.deleted_instance_profiles.extend(deleted)
+        result.deferred_resources.extend(deferred)
+        result.errors.update(errors)
+
+    # -------------------------------------------------------------------------
+    # Batch delete helpers
+    # -------------------------------------------------------------------------
+
+    def _should_use_batch(self, resource_count: int) -> bool:
+        """Determine if batch processing should be used for this operation."""
+        return self.batch_delete_size > 1 and resource_count > 1
+
+    def _make_sg_deleter(self) -> Callable[[str], bool]:
+        """Create a delete function for security groups.
+
+        Returns a closure that handles DependencyViolation by raising
+        an exception (which BatchProcessor records as a failure).
+        """
+        ec2 = self.ec2_client
+        dry_run = self.dry_run
+
+        def delete_security_group(sg_id: str) -> bool:
+            if dry_run:
+                logger.info(f"[DRY RUN] Would delete security group {sg_id}")
+                return True
+            try:
+                ec2.delete_security_group(GroupId=sg_id)
+                return True
+            except ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "")
+                if error_code == _DEPENDENCY_VIOLATION:
+                    raise Exception(f"{_DEPENDENCY_VIOLATION}: {sg_id} has dependencies") from e
+                raise
+
+        return delete_security_group
+
+    def _make_key_pair_deleter(self) -> Callable[[str], bool]:
+        """Create a delete function for key pairs."""
+        ec2 = self.ec2_client
+        dry_run = self.dry_run
+
+        def delete_key_pair(key_name: str) -> bool:
+            if dry_run:
+                logger.info(f"[DRY RUN] Would delete key pair {key_name}")
+                return True
+            ec2.delete_key_pair(KeyName=key_name)
+            return True
+
+        return delete_key_pair
+
+    def _make_volume_deleter(self) -> Callable[[str], bool]:
+        """Create a delete function for EBS volumes."""
+        ec2 = self.ec2_client
+        dry_run = self.dry_run
+
+        def delete_volume(volume_id: str) -> bool:
+            if dry_run:
+                logger.info(f"[DRY RUN] Would delete volume {volume_id}")
+                return True
+            ec2.delete_volume(VolumeId=volume_id)
+            return True
+
+        return delete_volume
+
+    # -------------------------------------------------------------------------
+    # Helpers
+    # -------------------------------------------------------------------------
+
+    def _should_defer_instance(self, instance: PackerInstance) -> bool:
+        """Check if instance should be deferred to next execution (Requirement 2.7)."""
+        return instance.state.lower() == self.SHUTTING_DOWN_STATE
+
+    def _execute_with_retry(self, operation: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+        """Execute an operation with exponential backoff retry (Requirement 6.2)."""
+        return self.retry_strategy.execute_with_retry(operation, *args, **kwargs)
+
     def _merge_orphan_results(
         self, result: CleanupResult, orphan_result: OrphanCleanupResult
     ) -> None:
         """Merge orphan cleanup results into main cleanup result."""
-        # Add orphaned key pairs to deleted key pairs
         result.deleted_key_pairs.extend(orphan_result.deleted_key_pairs)
-
-        # Add orphaned security groups to deleted security groups
         result.deleted_security_groups.extend(orphan_result.deleted_security_groups)
-
-        # Add orphaned IAM roles - we'll track these separately in the result
-        # For now, add them to deferred if they had errors
         result.deferred_resources.extend(orphan_result.deferred_resources)
-
-        # Merge errors
         result.errors.update(orphan_result.errors)
-
-    def get_last_orphan_cleanup_result(self) -> OrphanCleanupResult | None:
-        """
-        Get the last orphan cleanup result.
-
-        This is useful for including orphaned resource details in SNS notifications
-        as per Requirement 10.10.
-
-        Returns:
-            OrphanCleanupResult if orphan cleanup was executed, None otherwise
-        """
-        return self._last_orphan_cleanup_result
-
-    def _execute_with_retry(self, operation: Callable[..., T], *args: Any, **kwargs: Any) -> T:
-        """
-        Execute an operation with retry logic.
-
-        This implements Requirement 6.2: exponential backoff retry logic
-        for AWS API rate limits.
-
-        Args:
-            operation: The operation to execute
-            *args: Positional arguments for the operation
-            **kwargs: Keyword arguments for the operation
-
-        Returns:
-            The result of the operation
-        """
-        return self.retry_strategy.execute_with_retry(operation, *args, **kwargs)
 
     def collect_associated_resources(self, instance: PackerInstance) -> AssociatedResources:
         """
-        Collect resources directly associated with an instance.
-
-        This implements Requirement 2.2: collect directly associated resources
-        (key pair, security group, attached EBS volumes, associated EIP)
-        before termination.
+        Collect resources directly associated with an instance (Requirement 2.2).
 
         Args:
             instance: The PackerInstance to collect associated resources for
@@ -318,20 +492,11 @@ class CleanupEngine:
             AssociatedResources containing all directly associated resource IDs
         """
         associated = AssociatedResources(instance_id=instance.resource_id)
-
-        # Collect security groups from instance
         associated.security_group_ids = list(instance.security_groups)
-
-        # Collect key pair name
         associated.key_pair_name = instance.key_name
 
-        # Get associated resources from EC2 manager
         ec2_associated = self.ec2_manager.get_associated_resources(instance)
-
-        # Merge volume IDs
         associated.volume_ids = ec2_associated.get("volume_ids", [])
-
-        # Merge EIP allocation IDs
         associated.eip_allocation_ids = ec2_associated.get("eip_allocation_ids", [])
 
         logger.debug(
@@ -343,168 +508,3 @@ class CleanupEngine:
         )
 
         return associated
-
-    def _should_defer_instance(self, instance: PackerInstance) -> bool:
-        """
-        Check if instance should be deferred to next execution.
-
-        This implements Requirement 2.7: if an instance is in shutting-down state,
-        defer associated resource deletion to the next scheduled execution.
-
-        Args:
-            instance: The PackerInstance to check
-
-        Returns:
-            True if instance should be deferred, False otherwise
-        """
-        state = instance.state.lower()
-        return state == self.SHUTTING_DOWN_STATE
-
-    def _cleanup_instances_with_dependencies(
-        self, resources: ResourceCollection, result: CleanupResult
-    ) -> None:
-        """
-        Terminate EC2 instances with dependency-aware handling.
-
-        This implements Requirements 2.1, 2.2, 2.3, 2.5, 2.7:
-        1. Identify instances to terminate vs defer
-        2. Collect associated resources before termination
-        3. Terminate instances
-        4. Wait for termination confirmation
-        5. Defer shutting-down instances
-
-        Args:
-            resources: ResourceCollection containing instances
-            result: CleanupResult to update with operation results
-        """
-        logger.info(f"Processing {len(resources.instances)} instances")
-
-        instances_to_terminate = []
-
-        for instance in resources.instances:
-            # Check if instance should be deferred (Requirement 2.7)
-            if self._should_defer_instance(instance):
-                logger.info(
-                    f"Instance {instance.resource_id} in shutting-down state, "
-                    "deferring to next execution"
-                )
-                result.deferred_resources.append(instance.resource_id)
-                continue
-
-            # Check if already terminated
-            if instance.state.lower() == self.TERMINATED_STATE:
-                logger.info(f"Instance {instance.resource_id} already terminated")
-                result.terminated_instances.append(instance.resource_id)
-                continue
-
-            instances_to_terminate.append(instance)
-
-        if not instances_to_terminate:
-            logger.info("No instances to terminate")
-            return
-
-        # Terminate instances
-        terminated, deferred, errors = self.ec2_manager.terminate_instances(instances_to_terminate)
-
-        result.terminated_instances.extend(terminated)
-        result.deferred_resources.extend(deferred)
-        result.errors.update(errors)
-
-        # Wait for termination if not dry run (Requirement 2.5)
-        if terminated and not self.dry_run:
-            logger.info("Waiting for instance termination confirmation...")
-            self.ec2_manager.wait_for_termination(terminated, timeout_seconds=120)
-
-    def _cleanup_security_groups(
-        self, resources: ResourceCollection, result: CleanupResult
-    ) -> None:
-        """Delete security groups."""
-        logger.info(f"Deleting {len(resources.security_groups)} security groups")
-
-        deleted, deferred, errors = self.network_manager.delete_security_groups(
-            resources.security_groups
-        )
-
-        result.deleted_security_groups.extend(deleted)
-        result.deferred_resources.extend(deferred)
-        result.errors.update(errors)
-
-    def _cleanup_key_pairs(self, resources: ResourceCollection, result: CleanupResult) -> None:
-        """Delete key pairs."""
-        logger.info(f"Deleting {len(resources.key_pairs)} key pairs")
-
-        deleted, deferred, errors = self.network_manager.delete_key_pairs(resources.key_pairs)
-
-        result.deleted_key_pairs.extend(deleted)
-        result.deferred_resources.extend(deferred)
-        result.errors.update(errors)
-
-    def _cleanup_elastic_ips(self, resources: ResourceCollection, result: CleanupResult) -> None:
-        """Release elastic IPs."""
-        logger.info(f"Releasing {len(resources.elastic_ips)} elastic IPs")
-
-        released, deferred, errors = self.network_manager.release_elastic_ips(resources.elastic_ips)
-
-        result.released_elastic_ips.extend(released)
-        result.deferred_resources.extend(deferred)
-        result.errors.update(errors)
-
-    def _cleanup_volumes(self, resources: ResourceCollection, result: CleanupResult) -> None:
-        """Delete EBS volumes."""
-        logger.info(f"Deleting {len(resources.volumes)} volumes")
-
-        deleted, deferred, errors = self.storage_manager.delete_volumes(resources.volumes)
-
-        result.deleted_volumes.extend(deleted)
-        result.deferred_resources.extend(deferred)
-        result.errors.update(errors)
-
-    def _cleanup_snapshots(self, resources: ResourceCollection, result: CleanupResult) -> None:
-        """Delete EBS snapshots."""
-        logger.info(f"Deleting {len(resources.snapshots)} snapshots")
-
-        # Get snapshots used by registered AMIs to avoid deleting them
-        registered_snapshots = self.storage_manager.get_registered_ami_snapshots()
-
-        deleted, deferred, errors = self.storage_manager.delete_snapshots(
-            resources.snapshots, registered_snapshots
-        )
-
-        result.deleted_snapshots.extend(deleted)
-        result.deferred_resources.extend(deferred)
-        result.errors.update(errors)
-
-    def _cleanup_instance_profiles(
-        self, resources: ResourceCollection, result: CleanupResult
-    ) -> None:
-        """Delete IAM instance profiles with role detachment.
-
-        This implements Requirement 2.4 for IAM instance profiles matching
-        the `packer_*` pattern. Handles orphaned instance profiles from
-        failed Packer builds (Requirement 2.8).
-        """
-        logger.info(f"Deleting {len(resources.instance_profiles)} instance profiles")
-
-        if not self.iam_manager:
-            logger.warning("IAM manager not initialized, skipping instance profile cleanup")
-            return
-
-        deleted, deferred, errors = self.iam_manager.delete_instance_profiles(
-            resources.instance_profiles
-        )
-
-        result.deleted_instance_profiles.extend(deleted)
-        result.deferred_resources.extend(deferred)
-        result.errors.update(errors)
-
-    def get_last_dry_run_report(self) -> DryRunReport | None:
-        """
-        Get the last dry-run report generated by cleanup_resources.
-
-        This is useful for sending SNS notifications with detailed
-        simulation reports as per Requirement 9.3.
-
-        Returns:
-            DryRunReport if a dry-run was executed, None otherwise
-        """
-        return getattr(self, "_last_dry_run_report", None)

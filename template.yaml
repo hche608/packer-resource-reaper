@@ -9,13 +9,24 @@ Description: >
 Metadata:
   AWS::ServerlessRepo::Application:
     Name: packer-resource-reaper
-    Description: Automatically clean up zombie EC2 instances from failed Packer builds
+    Description: >
+      Automatically clean up zombie EC2 instances and associated resources
+      (security groups, key pairs, volumes, EIPs) left behind by failed Packer builds.
+      Identifies resources by SSH key name pattern and age threshold.
     Author: DevOps Team
+    SpdxLicenseId: MIT
+    LicenseUrl: LICENSE
+    ReadmeUrl: SAR-README.md
+    HomePageUrl: https://github.com/hche608/packer-resource-reaper
+    SourceCodeUrl: https://github.com/hche608/packer-resource-reaper
+    SemanticVersion: 1.0.0
     Labels:
       - packer
       - ec2
       - cleanup
       - serverless
+      - lambda
+      - cost-optimization
 
 Parameters:
   MaxInstanceAgeHours:
@@ -109,7 +120,7 @@ Globals:
     MemorySize: 256
     Runtime: python3.11
     Architectures:
-      - x86_64
+      - arm64
 
 Resources:
   # SNS Topic for notifications
@@ -188,6 +199,7 @@ Resources:
               - ec2:DescribeKeyPairs
               - ec2:DescribeAddresses
               - ec2:DescribeNetworkInterfaces
+              - ec2:DescribeImages
             Resource: '*'
 
   # IAM Policy for EC2 cleanup operations (destructive)
@@ -326,6 +338,7 @@ Resources:
       CodeUri: .
       Handler: reaper.handler.lambda_handler
       Role: !GetAtt ReaperFunctionRole.Arn
+      ReservedConcurrentExecutions: 1
       Environment:
         Variables:
           MAX_INSTANCE_AGE_HOURS: !Ref MaxInstanceAgeHours

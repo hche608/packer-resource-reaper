@@ -78,43 +78,28 @@ class RetryStrategy:
 
 
 class AWSClientManager:
-    """Manages AWS boto3 clients with retry logic and cross-account support."""
+    """Manages AWS boto3 clients with retry logic.
+
+    Operates strictly within the current account and region using
+    default Lambda execution environment credentials (Requirements 8.1-8.6).
+    """
 
     def __init__(
         self,
         region: str = "us-east-1",
-        role_arn: str | None = None,
         retry_strategy: RetryStrategy | None = None,
     ):
         self.region = region
-        self.role_arn = role_arn
         self.retry_strategy = retry_strategy or RetryStrategy()
         self._session: boto3.Session | None = None
         self._clients: dict[str, Any] = {}
 
     def _get_session(self) -> boto3.Session:
-        """Get or create boto3 session, with role assumption if configured."""
+        """Get or create boto3 session using default credentials."""
         if self._session is not None:
             return self._session
 
-        if self.role_arn:
-            # Assume cross-account role
-            sts_client = boto3.client("sts", region_name=self.region)
-            response = sts_client.assume_role(
-                RoleArn=self.role_arn,
-                RoleSessionName="PackerResourceReaper",
-                DurationSeconds=3600,
-            )
-            credentials = response["Credentials"]
-            self._session = boto3.Session(
-                aws_access_key_id=credentials["AccessKeyId"],
-                aws_secret_access_key=credentials["SecretAccessKey"],
-                aws_session_token=credentials["SessionToken"],
-                region_name=self.region,
-            )
-        else:
-            self._session = boto3.Session(region_name=self.region)
-
+        self._session = boto3.Session(region_name=self.region)
         return self._session
 
     def get_client(self, service_name: str) -> Any:

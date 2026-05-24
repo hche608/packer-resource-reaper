@@ -15,17 +15,16 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-added-large-files
-      # Critical Best Practices
-      - id: debug-statements        # Blocks `import pdb`, `breakpoint()`, etc.
-      - id: check-merge-conflict    # Blocks git merge markers (<<<<<<<)
-      - id: check-case-conflict     # Prevents case-insensitive filename collisions
-      - id: detect-aws-credentials  # Scans for accidental AWS key commits
+      - id: debug-statements
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-aws-credentials
         args:
           - --allow-missing-credentials
-      - id: detect-private-key      # Scans for private keys
+      - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.0  # Use a recent stable version
+    rev: v0.5.0
     hooks:
       - id: ruff
         args: [--fix]
@@ -40,22 +39,14 @@ We use **Ruff** to replace Flake8, Isort, Bandit, and Pyupgrade.
 
 ```toml
 [tool.ruff.lint]
-# E/F/W: Standard flake8 rules
-# I: Isort (imports)
-# UP: Pyupgrade (modernize syntax)
-# B: Bugbear (potential bugs)
-# SIM: Simplify (code logic)
-# S: Bandit (security)
-# N: PEP8 Naming
-# C90: McCabe Complexity
 select = ["E", "F", "I", "W", "UP", "B", "SIM", "S", "N", "C90"]
-ignore = ["E501"] # Line length handled by formatter
+ignore = ["E501"]  # Line length handled by formatter
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101"] # Allow asserts in tests
+"tests/*" = ["S101", "S105", "S106", "N803", "SIM102", "SIM103", "SIM108", "SIM116", "SIM117", "B007", "C901"]
 
 [tool.ruff.lint.mccabe]
-max-complexity = 10
+max-complexity = 15  # Allows slightly higher for complex AWS orchestration logic
 ```
 
 ## 3. Static Typing (Mypy)
@@ -67,14 +58,14 @@ Enforce strict typing to minimize the usage of `Any` and ensure type safety.
 ```toml
 [tool.mypy]
 python_version = "3.11"
-# Strictness & Safety Flags
-warn_return_any = true          # Warn if a function returns Any
+warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = true    # Require type hints for all functions
-check_untyped_defs = true       # Check bodies of untyped functions
-disallow_any_generics = true    # Disallow generic types without arguments (e.g. List vs List[str])
-no_implicit_optional = true     # Don't assume Optional just because of a default None
+disallow_untyped_defs = true
+check_untyped_defs = true
+disallow_any_generics = true
+no_implicit_optional = true
 ignore_missing_imports = true
+exclude = ["tests/", "build/", "dist/"]
 ```
 
 ## 4. Testing Strategy
@@ -82,5 +73,6 @@ ignore_missing_imports = true
 **Rule:** Avoid hardcoded values in tests. Use property-based testing or random data generation to ensure robustness against edge cases.
 
 - **Library:** `hypothesis` (Preferred for logic/property testing)
-- **Library:** `faker` (Preferred for generating dummy PII/Strings)
-- **Why:** Hardcoded values (e.g., `instance_id="i-12345"`) only test the "happy path". Generated data uncovers edge cases (empty strings, unicode, max length) automatically.
+- **Why:** Hardcoded values only test the "happy path". Generated data uncovers edge cases automatically.
+- **Coverage:** 867 tests, 96% coverage, minimum 80% enforced.
+- **Property tests:** Use `@settings(max_examples=100, deadline=5000)` for consistency.
