@@ -45,7 +45,7 @@ jobs:
         run: uv run pytest tests/ -v --cov=reaper --cov-report=term-missing --cov-fail-under=80
 
       - name: Dependency audit
-        run: uvx pip-audit --require-hashes=false --progress-spinner=off
+        run: uvx pip-audit --progress-spinner=off
 
   sam-validate:
     runs-on: ubuntu-latest
