@@ -29,6 +29,9 @@ jobs:
       - name: Lint
         run: uv run ruff check .
 
+      - name: Security check (bandit rules)
+        run: uv run ruff check . --select S --statistics
+
       - name: Format check
         run: uv run ruff format --check .
 
@@ -37,6 +40,9 @@ jobs:
 
       - name: Run tests
         run: uv run pytest tests/ -v --cov=reaper --cov-report=term-missing --cov-fail-under=80
+
+      - name: Dependency audit
+        run: uvx pip-audit --require-hashes=false --progress-spinner=off
 
   sam-validate:
     runs-on: ubuntu-latest
