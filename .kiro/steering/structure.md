@@ -11,7 +11,7 @@
 │   │   ├── network_manager.py # Security groups, key pairs, EIPs
 │   │   ├── iam_manager.py     # IAM instance profile cleanup
 │   │   ├── orphan_manager.py  # Orphaned resource detection
-│   │   ├── batch_processor.py # Batch delete operations
+│   │   ├── batch_processor.py # Batch delete with ThreadPoolExecutor
 │   │   └── dry_run.py         # Dry-run simulation
 │   ├── filters/               # Resource filtering
 │   │   ├── base.py            # Abstract filter interface
@@ -22,15 +22,19 @@
 │   └── utils/                 # Shared utilities
 │       ├── aws_client.py      # AWS client management, retry logic
 │       ├── config.py          # Environment configuration
-│       ├── logging.py         # Logging setup
+│       ├── logging.py         # Structured logging
 │       └── security.py        # Input validation, scope enforcement
-├── tests/                     # Test suite
+├── tests/                     # Test suite (867 tests, 96% coverage)
 │   ├── conftest.py            # Shared fixtures
 │   └── test_*.py              # Test modules
 ├── template.yaml              # SAM/CloudFormation template
 ├── samconfig.toml             # SAM deployment configs
 ├── pyproject.toml             # Python project config
 ├── Makefile                   # Development commands
+├── LICENSE                    # MIT license
+├── SAR-README.md              # Serverless Application Repository readme
+├── ROADMAP.md                 # Planned improvements
+├── DEPLOYMENT.md              # Deployment guide
 └── events/                    # Sample Lambda events
     └── scheduled.json
 ```
@@ -40,5 +44,7 @@
 - Two-phase cleanup: primary zombie cleanup → orphaned resource cleanup
 - Dependency-aware sequencing: instances terminated before dependent resources
 - Manager pattern: separate managers for EC2, storage, network, IAM operations
+- Factory closures for batch delete functions (thread-safe, no lambda capture issues)
 - Abstract filter interface: `ResourceFilter` base class for filtering strategies
 - Dataclass models: `PackerResource` hierarchy for type-safe resource handling
+- Single account/region scope: no cross-account support by design

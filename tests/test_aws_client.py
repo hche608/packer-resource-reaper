@@ -220,36 +220,16 @@ class TestAWSClientManager:
 
         assert account_id == "123456789012"
 
-    @patch("reaper.utils.aws_client.boto3.client")
     @patch("reaper.utils.aws_client.boto3.Session")
-    def test_get_session_with_role_arn(self, mock_session_class, mock_boto_client):
-        """Test session creation with role assumption."""
-        mock_sts = MagicMock()
-        mock_sts.assume_role.return_value = {
-            "Credentials": {
-                "AccessKeyId": "AKIATEST",
-                "SecretAccessKey": "secret",
-                "SessionToken": "token",
-            }
-        }
-        mock_boto_client.return_value = mock_sts
-
+    def test_get_session_creates_session(self, mock_session_class):
+        """Test session creation with default credentials."""
         mock_session = MagicMock()
         mock_session_class.return_value = mock_session
 
-        manager = AWSClientManager(
-            region="us-east-1",
-            role_arn="arn:aws:iam::123456789012:role/TestRole",
-        )
+        manager = AWSClientManager(region="us-east-1")
         manager._get_session()
 
-        mock_sts.assume_role.assert_called_once()
-        mock_session_class.assert_called_with(
-            aws_access_key_id="AKIATEST",
-            aws_secret_access_key="secret",
-            aws_session_token="token",
-            region_name="us-east-1",
-        )
+        mock_session_class.assert_called_with(region_name="us-east-1")
 
     @patch("reaper.utils.aws_client.boto3.Session")
     def test_get_session_without_role_arn(self, mock_session_class):

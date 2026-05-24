@@ -162,7 +162,7 @@ def test_property12_invalid_log_level_defaults_to_info(invalid_level: str, caplo
     os.environ["LOG_LEVEL"] = invalid_level
 
     caplog.clear()  # Clear previous log records
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.WARNING, logger="reaper.utils.config"):
         config = ReaperConfig.from_environment(validate=False)
 
     # Should default to INFO

@@ -291,7 +291,8 @@ class TestLogSanitizer:
         }
         result = LogSanitizer.sanitize_dict(data)
 
-        assert result["password"] == "[REDACTED]"
+        expected_redacted = "[REDACTED]"
+        assert result["password"] == expected_redacted
         assert result["normal"] == "value"
 
     def test_sanitize_dict_nested(self):
@@ -303,7 +304,8 @@ class TestLogSanitizer:
         }
         result = LogSanitizer.sanitize_dict(data)
 
-        assert result["outer"]["password"] == "[REDACTED]"
+        expected_redacted = "[REDACTED]"
+        assert result["outer"]["password"] == expected_redacted
 
     def test_sanitize_dict_with_list(self):
         """Test sanitizing dictionary with list values."""

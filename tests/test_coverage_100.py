@@ -150,32 +150,18 @@ class TestCleanupEngineExtended:
 # ============================================================================
 
 
-class TestAWSClientManagerRoleAssumption:
-    """Tests for AWSClientManager with role assumption."""
+class TestAWSClientManagerSessionCreation:
+    """Tests for AWSClientManager session creation."""
 
     @patch("reaper.utils.aws_client.boto3")
-    def test_get_session_with_role_arn(self, mock_boto3):
-        """Test session creation with role assumption."""
-        mock_sts = MagicMock()
-        mock_sts.assume_role.return_value = {
-            "Credentials": {
-                "AccessKeyId": "AKIATEST",
-                "SecretAccessKey": "secret",
-                "SessionToken": "token",
-            }
-        }
-        mock_boto3.client.return_value = mock_sts
+    def test_get_session_creates_default_session(self, mock_boto3):
+        """Test session creation uses default credentials."""
         mock_boto3.Session.return_value = MagicMock()
 
-        manager = AWSClientManager(
-            region="us-east-1",
-            role_arn="arn:aws:iam::123456789012:role/TestRole",
-        )
-
+        manager = AWSClientManager(region="us-east-1")
         manager._get_session()
 
-        mock_sts.assume_role.assert_called_once()
-        mock_boto3.Session.assert_called_once()
+        mock_boto3.Session.assert_called_once_with(region_name="us-east-1")
 
 
 # ============================================================================
@@ -905,48 +891,19 @@ class TestCleanupEngineInstanceProfiles:
 # ============================================================================
 
 
-class TestAWSClientManagerRoleAssumptionComplete:
-    """Complete tests for AWSClientManager with role assumption."""
+class TestAWSClientManagerSessionComplete:
+    """Complete tests for AWSClientManager session management."""
 
     @patch("reaper.utils.aws_client.boto3")
-    def test_get_session_creates_session_with_credentials(self, mock_boto3):
-        """Test session creation uses assumed role credentials."""
-        mock_sts = MagicMock()
-        mock_sts.assume_role.return_value = {
-            "Credentials": {
-                "AccessKeyId": "AKIATEST123",
-                "SecretAccessKey": "secretkey123",
-                "SessionToken": "sessiontoken123",
-            }
-        }
-        mock_boto3.client.return_value = mock_sts
-
+    def test_get_session_creates_default_session(self, mock_boto3):
+        """Test session creation uses default credentials."""
         mock_session = MagicMock()
         mock_boto3.Session.return_value = mock_session
 
-        manager = AWSClientManager(
-            region="us-west-2",
-            role_arn="arn:aws:iam::999999999999:role/CrossAccountRole",
-        )
-
-        # Call _get_session to trigger role assumption
+        manager = AWSClientManager(region="us-west-2")
         result = manager._get_session()
 
-        # Verify assume_role was called with correct parameters
-        mock_sts.assume_role.assert_called_once_with(
-            RoleArn="arn:aws:iam::999999999999:role/CrossAccountRole",
-            RoleSessionName="PackerResourceReaper",
-            DurationSeconds=3600,
-        )
-
-        # Verify Session was created with credentials
-        mock_boto3.Session.assert_called_once_with(
-            aws_access_key_id="AKIATEST123",
-            aws_secret_access_key="secretkey123",
-            aws_session_token="sessiontoken123",
-            region_name="us-west-2",
-        )
-
+        mock_boto3.Session.assert_called_once_with(region_name="us-west-2")
         assert result == mock_session
 
     @patch("reaper.utils.aws_client.boto3")
@@ -2038,41 +1995,27 @@ class TestBatchProcessorLines174to178:
         assert "Simulated failure" in result.errors["res-fail"]
 
 
-class TestAWSClientManagerLines54to56:
-    """Tests to cover aws_client.py lines 54-56."""
+class TestAWSClientManagerSessionCaching:
+    """Tests to cover aws_client.py session caching."""
 
     @patch("reaper.utils.aws_client.boto3")
-    def test_get_session_with_role_arn_full_flow(self, mock_boto3):
-        """Test full role assumption flow."""
-        mock_sts = MagicMock()
-        mock_sts.assume_role.return_value = {
-            "Credentials": {
-                "AccessKeyId": "AKIATEST",
-                "SecretAccessKey": "secret",
-                "SessionToken": "token",
-            }
-        }
-        mock_boto3.client.return_value = mock_sts
-
+    def test_get_session_caches_after_first_call(self, mock_boto3):
+        """Test session is cached after first creation."""
         mock_session = MagicMock()
         mock_boto3.Session.return_value = mock_session
 
-        manager = AWSClientManager(
-            region="us-east-1",
-            role_arn="arn:aws:iam::123456789012:role/TestRole",
-        )
+        manager = AWSClientManager(region="us-east-1")
 
         # First call creates session
         session1 = manager._get_session()
         assert session1 == mock_session
 
-        # Verify credentials were used
-        mock_boto3.Session.assert_called_with(
-            aws_access_key_id="AKIATEST",
-            aws_secret_access_key="secret",
-            aws_session_token="token",
-            region_name="us-east-1",
-        )
+        # Second call returns cached session
+        session2 = manager._get_session()
+        assert session2 == mock_session
+
+        # Session constructor only called once
+        mock_boto3.Session.assert_called_once_with(region_name="us-east-1")
 
 
 # ============================================================================

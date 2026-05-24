@@ -120,6 +120,11 @@ invoke-debug: build
 	@echo "Running with DEBUG logging..."
 	sam local invoke ReaperFunction --event events/scheduled.json --env-vars env.json
 
+invoke-local:
+	@echo "Running reaper locally (dry-run, no Docker required)..."
+	MAX_INSTANCE_AGE_HOURS=2 DRY_RUN=true LOG_LEVEL=INFO SNS_TOPIC_ARN="" BATCH_DELETE_SIZE=5 KEY_PAIR_PATTERN=packer_ \
+		uv run python -c "from reaper.handler import lambda_handler; import json; print(json.dumps(lambda_handler({}, None), indent=2))"
+
 validate:
 	sam validate --lint
 
